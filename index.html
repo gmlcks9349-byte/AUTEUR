@@ -130,7 +130,8 @@ input, textarea { font-family: inherit; }
 }
 .msg-bubble.error {
   background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.2);
-  color: rgba(239,68,68,0.7); font-size: 10.5px;
+  color: rgba(239,68,68,0.7); font-size: 10.5px; white-space: pre-wrap;
+  word-break: break-all;
 }
 .typing-indicator {
   display: flex; gap: 4px; align-items: center; padding: 4px 0;
@@ -981,7 +982,17 @@ function parsePlannerResponse(resp) {
 function applyIntentConfirmed(data) {
   sharedState.planner_director.brand = data.brand;
   sharedState.planner_director.director_intent = { ...data.director_intent, confirmed: true };
-  sharedState.planner_director.execution_plan.scene_count_guide = data.scene_count_guide || 5;
+  // scene_count_guide 방어: 범위값("8-10") 또는 비정수 처리
+  const rawCount = data.scene_count_guide;
+  let sceneCount = 5;
+  if (typeof rawCount === 'number') {
+    sceneCount = Math.round(rawCount);
+  } else if (typeof rawCount === 'string') {
+    const nums = rawCount.match(/\d+/g);
+    if (nums) sceneCount = Math.round(nums.reduce((a,b) => +a + +b, 0) / nums.length);
+  }
+  sceneCount = Math.max(3, Math.min(12, sceneCount)); // 3-12 범위 클램프
+  sharedState.planner_director.execution_plan.scene_count_guide = sceneCount;
   sharedState.session.entry_point = data.entry_point || 'B';
   sharedState.session.hitl_pending = true;
   sharedState.session.hitl_checkpoint = 'planner';
@@ -1390,7 +1401,7 @@ Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
 Brand Context: ${sharedState.research.brand_context}`;
 
   try {
-    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey, 8192);
     removeTyping();
     const parsed = safeParseJSON(resp);
     if (parsed && parsed.scenes) {
@@ -1415,7 +1426,8 @@ Brand Context: ${sharedState.research.brand_context}`;
       const revLabel = revN > 0 ? ` (Revision #${revN})` : '';
       addMessage('hitl', `씬 ${parsed.scenes.length}개가 작성됐습니다${revLabel}. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
     } else {
-      addMessage('error', 'Script 파싱 실패.');
+      const preview = resp ? resp.substring(0, 300) : '(빈 응답)';
+      addMessage('error', `Script 파싱 실패. Claude 응답 앞 300자:\n${preview}`);
       setAgentStatus('script', 'failed');
     }
   } catch(e) {
@@ -1569,7 +1581,7 @@ Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
 Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
 
   try {
-    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey, 8192);
     removeTyping();
     const parsed = safeParseJSON(resp);
     if (parsed && parsed.shots) {
@@ -2145,7 +2157,7 @@ function toggleGeminiAnalysis(btn) {
 }
 
 // ─── CLAUDE API ───────────────────────────────────────────
-async function callClaude(systemPrompt, messages, apiKey) {
+async function callClaude(systemPrompt, messages, apiKey, maxTokens = 4096) {
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -2156,7 +2168,7 @@ async function callClaude(systemPrompt, messages, apiKey) {
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: messages
     })
