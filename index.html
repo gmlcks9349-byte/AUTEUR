@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auteur — Articulate your Intent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #000; color: #fff; font-family: 'Inter', -apple-system, sans-serif; overflow: hidden; }
+button { font-family: inherit; cursor: pointer; }
+input, textarea { font-family: inherit; }
+
+/* ─── CSS VARS ───────────────────────────────────────── */
+:root {
+  --lime: #E8FF57;
+  --lime-10: rgba(232,255,87,0.10);
+  --lime-20: rgba(232,255,87,0.20);
+  --lime-30: rgba(232,255,87,0.30);
+  --lime-50: rgba(232,255,87,0.50);
+  --lime-70: rgba(232,255,87,0.70);
+  --lime-85: rgba(232,255,87,0.85);
+  --slate: rgba(148,163,184,1);
+  --slate-15: rgba(148,163,184,0.15);
+  --slate-25: rgba(148,163,184,0.25);
+  --slate-35: rgba(148,163,184,0.35);
+  --slate-45: rgba(148,163,184,0.45);
+  --slate-60: rgba(148,163,184,0.60);
+  --w-04: rgba(255,255,255,0.04);
+  --w-06: rgba(255,255,255,0.06);
+  --w-08: rgba(255,255,255,0.08);
+  --w-12: rgba(255,255,255,0.12);
+  --w-20: rgba(255,255,255,0.20);
+  --w-28: rgba(255,255,255,0.28);
+  --w-40: rgba(255,255,255,0.40);
+  --w-60: rgba(255,255,255,0.60);
+  --w-80: rgba(255,255,255,0.80);
+  --border: 0.5px solid var(--w-08);
+  --border-dim: 0.5px solid var(--w-06);
+  --border-lime: 0.5px solid var(--lime-30);
+  --mono: 'JetBrains Mono', monospace;
+  --radius: 6px;
+  --radius-md: 8px;
+}
+
+/* ─── LAYOUT ─────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ─── NAV ────────────────────────────────────────────── */
+#nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px; height: 52px; flex-shrink: 0;
+  border-bottom: var(--border-dim);
+}
+.nav-logo { display: flex; align-items: baseline; gap: 10px; }
+.nav-logo-name {
+  font-size: 13px; font-weight: 500; letter-spacing: 0.10em;
+  color: #fff; text-transform: uppercase;
+}
+.nav-logo-tag {
+  font-size: 10px; font-weight: 300; letter-spacing: 0.13em;
+  color: var(--slate-45); text-transform: uppercase;
+}
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-session {
+  display: flex; align-items: center; gap: 6px;
+}
+.nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--w-12); }
+.nav-dot.active { background: var(--lime); }
+.nav-session-id {
+  font-size: 10px; color: var(--slate-35); letter-spacing: 0.06em;
+  font-family: var(--mono);
+}
+.nav-btn {
+  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+  padding: 5px 12px; border-radius: 4px; border: var(--border);
+  color: var(--slate-45); background: transparent;
+  transition: border-color 0.2s, color 0.2s;
+}
+.nav-btn:hover { border-color: var(--w-20); color: var(--w-60); }
+.nav-btn.active-view { border-color: var(--lime-30); color: var(--lime-70); }
+
+/* ─── MAIN BODY ──────────────────────────────────────── */
+#main { display: flex; flex: 1; min-height: 0; }
+
+/* ─── CHAT PANEL ─────────────────────────────────────── */
+#chat-panel {
+  width: 300px; flex-shrink: 0;
+  border-right: var(--border-dim);
+  display: flex; flex-direction: column;
+}
+.panel-header {
+  padding: 14px 18px 10px; flex-shrink: 0;
+  border-bottom: var(--border-dim);
+}
+.panel-label {
+  font-size: 10px; font-weight: 400; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--slate-35);
+}
+#messages {
+  flex: 1; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto; min-height: 0;
+}
+#messages::-webkit-scrollbar { width: 2px; }
+#messages::-webkit-scrollbar-thumb { background: var(--w-08); }
+
+.msg { display: flex; flex-direction: column; gap: 4px; }
+.msg-label {
+  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--slate-35); font-weight: 400;
+}
+.msg-label.user { color: var(--w-28); }
+.msg-bubble {
+  font-size: 11.5px; font-weight: 300; line-height: 1.65;
+  color: var(--w-60); padding: 9px 11px;
+  background: var(--w-04); border-radius: var(--radius);
+  border: var(--border-dim);
+}
+.msg-bubble.agent { color: var(--w-60); }
+.msg-bubble.system {
+  background: var(--slate-15); border-color: rgba(148,163,184,0.14);
+  color: var(--slate-60); font-size: 10.5px;
+}
+.msg-bubble.hitl {
+  background: var(--lime-10); border-color: var(--lime-30);
+  color: var(--lime-85); font-size: 11px;
+}
+.msg-bubble.error {
+  background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.2);
+  color: rgba(239,68,68,0.7); font-size: 10.5px;
+}
+.typing-indicator {
+  display: flex; gap: 4px; align-items: center; padding: 4px 0;
+}
+.typing-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--slate-35);
+  animation: typingPulse 1.2s infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(1); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+.chat-input-area {
+  padding: 10px 16px 14px; flex-shrink: 0;
+  border-top: var(--border-dim);
+}
+.input-box {
+  display: flex; align-items: flex-end; gap: 8px;
+  background: var(--w-04); border: var(--border);
+  border-radius: var(--radius); padding: 8px 10px;
+  transition: border-color 0.2s;
+}
+.input-box:focus-within { border-color: var(--w-20); }
+#chat-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 11px; color: var(--w-80); font-weight: 300;
+  resize: none; min-height: 20px; max-height: 80px;
+  line-height: 1.5;
+}
+#chat-input::placeholder { color: var(--slate-35); }
+#send-btn {
+  width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0;
+  background: var(--lime-10); border: var(--border-lime);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
+#send-btn:hover { background: var(--lime-20); }
+#send-btn svg { display: block; }
+
+/* ─── PIPELINE PANEL ─────────────────────────────────── */
+#pipeline-panel {
+  flex: 1; display: flex; flex-direction: column; min-width: 0;
+  position: relative; overflow: hidden;
+}
+.pipeline-header {
+  padding: 14px 24px 10px; flex-shrink: 0;
+  border-bottom: var(--border-dim);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.entry-badge {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--slate-45); background: rgba(148,163,184,0.07);
+  border: 0.5px solid rgba(148,163,184,0.12);
+  border-radius: 4px; padding: 3px 8px;
+}
+
+/* AGENTS */
+#agents { padding: 12px 24px 8px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+.agent-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 10px; border-radius: 5px;
+  transition: background 0.3s, border-color 0.3s, opacity 0.3s;
+  border: 0.5px solid transparent;
+}
+.agent-row.done { background: rgba(148,163,184,0.04); }
+.agent-row.running { background: var(--lime-10); border-color: rgba(232,255,87,0.12); }
+.agent-row.pending { opacity: 0.32; }
+
+.agent-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s; }
+.agent-row.done .agent-dot { background: var(--slate-35); }
+.agent-row.running .agent-dot { background: var(--lime); box-shadow: 0 0 0 3px rgba(232,255,87,0.14); }
+.agent-row.pending .agent-dot { background: var(--w-12); }
+
+.agent-name {
+  flex: 1; font-size: 11px; font-weight: 400;
+  letter-spacing: 0.04em; text-transform: uppercase; transition: color 0.3s;
+}
+.agent-row.done .agent-name { color: var(--slate-45); }
+.agent-row.running .agent-name { color: var(--lime-85); font-weight: 500; }
+.agent-row.pending .agent-name { color: var(--w-40); }
+
+.agent-status {
+  font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; transition: color 0.3s;
+}
+.agent-row.done .agent-status { color: var(--slate-25); }
+.agent-row.running .agent-status { color: var(--lime-50); }
+.agent-row.pending .agent-status { color: var(--w-20); }
+
+/* OUTPUT CARD */
+#output-card {
+  flex: 1; margin: 0 24px 0; min-height: 0;
+  border: var(--border); border-radius: var(--radius-md);
+  background: var(--w-04); display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.output-card-header {
+  padding: 12px 16px 8px; flex-shrink: 0;
+  border-bottom: var(--border-dim);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.output-card-title {
+  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--slate-35);
+}
+.output-card-body {
+  flex: 1; padding: 12px 16px; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.output-card-body::-webkit-scrollbar { width: 2px; }
+.output-card-body::-webkit-scrollbar-thumb { background: var(--w-08); }
+
+.output-field { display: flex; flex-direction: column; gap: 3px; }
+.output-key {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--slate-35);
+}
+.output-val { font-size: 11.5px; font-weight: 300; color: var(--w-60); line-height: 1.55; }
+.output-divider { height: 0.5px; background: var(--w-06); }
+
+/* Scene cards in script output */
+.scene-card {
+  background: var(--w-04); border: var(--border-dim);
+  border-radius: var(--radius); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.scene-num {
+  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--lime-50); font-family: var(--mono);
+}
+
+.output-actions {
+  padding: 10px 16px 12px; flex-shrink: 0;
+  border-top: var(--border-dim);
+  display: flex; gap: 8px; align-items: center;
+}
+.btn-confirm {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 16px; border-radius: 4px;
+  background: var(--lime-10); border: var(--border-lime);
+  color: var(--lime-85); transition: background 0.2s;
+}
+.btn-confirm:hover { background: var(--lime-20); }
+.btn-secondary {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 4px;
+  background: transparent; border: var(--border);
+  color: var(--slate-45); transition: border-color 0.2s, color 0.2s;
+}
+.btn-secondary:hover { border-color: var(--w-20); color: var(--w-60); }
+
+.output-empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+}
+.output-empty-text {
+  font-size: 11px; color: var(--slate-25); letter-spacing: 0.04em;
+  font-weight: 300;
+}
+
+/* PEEK BAR */
+#peek-bar {
+  flex-shrink: 0; margin: 8px 24px 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px; border: var(--border); border-radius: 5px;
+  cursor: pointer; background: transparent; width: calc(100% - 48px);
+  transition: background 0.2s, border-color 0.2s;
+}
+#peek-bar:hover { background: var(--lime-10); border-color: rgba(232,255,87,0.12); }
+.peek-left { display: flex; align-items: center; gap: 8px; }
+.peek-icon { width: 6px; height: 6px; border-radius: 50%; background: var(--lime-30); }
+.peek-label {
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--slate-35); font-weight: 400;
+}
+#peek-arrow {
+  font-size: 8px; color: var(--slate-25);
+  font-family: var(--mono);
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+
+/* LIVE CODEX */
+#live-codex {
+  flex-shrink: 0; margin: 0 24px;
+  overflow: hidden; max-height: 0;
+  transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
+  opacity: 0;
+  border-radius: 0 0 6px 6px;
+}
+#live-codex.open { max-height: 180px; opacity: 1; }
+.codex-inner {
+  border: 0.5px solid rgba(232,255,87,0.10);
+  border-top: none; border-radius: 0 0 6px 6px;
+  padding: 12px 14px; background: rgba(232,255,87,0.025);
+  overflow-y: auto; max-height: 180px;
+}
+.codex-inner::-webkit-scrollbar { width: 2px; }
+.codex-inner::-webkit-scrollbar-thumb { background: var(--lime-20); }
+.codex-pre {
+  font-family: var(--mono); font-size: 10px; font-weight: 300;
+  line-height: 1.75; white-space: pre; color: var(--lime-50);
+}
+.jk { color: var(--lime-50); }
+.jv-s { color: var(--lime-85); }
+.jv-b-t { color: var(--lime); font-weight: 400; }
+.jv-b-f { color: var(--slate-45); }
+.jv-n { color: rgba(180,255,120,0.75); }
+.jv-null { color: var(--slate-35); }
+.jp { color: var(--slate-25); }
+
+.pipeline-spacer { height: 12px; flex-shrink: 0; }
+
+/* ─── ARCHIVE VIEW ────────────────────────────────────── */
+#archive-view {
+  display: none; flex: 1; flex-direction: column; min-height: 0;
+}
+#archive-view.visible { display: flex; }
+.archive-header {
+  padding: 20px 28px 14px; flex-shrink: 0;
+  border-bottom: var(--border-dim);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.archive-title {
+  font-size: 12px; font-weight: 400; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--w-60);
+}
+.archive-count {
+  font-size: 10px; color: var(--slate-35); font-family: var(--mono);
+  letter-spacing: 0.06em;
+}
+#archive-list {
+  flex: 1; overflow-y: auto; padding: 16px 28px;
+  display: flex; flex-direction: column; gap: 12px; min-height: 0;
+}
+#archive-list::-webkit-scrollbar { width: 2px; }
+#archive-list::-webkit-scrollbar-thumb { background: var(--w-08); }
+
+.archive-empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 8px;
+}
+.archive-empty-title { font-size: 12px; color: var(--slate-25); letter-spacing: 0.06em; font-weight: 300; }
+.archive-empty-sub { font-size: 10px; color: var(--slate-15); letter-spacing: 0.04em; font-weight: 300; }
+
+.archive-card {
+  border: var(--border); border-radius: var(--radius-md);
+  background: var(--w-04); overflow: hidden;
+}
+.archive-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; cursor: pointer;
+  transition: background 0.2s;
+}
+.archive-card-header:hover { background: var(--w-04); }
+.archive-card-meta { display: flex; flex-direction: column; gap: 3px; }
+.archive-card-brand { font-size: 12px; font-weight: 400; color: var(--w-60); letter-spacing: 0.04em; }
+.archive-card-sub {
+  font-size: 9px; color: var(--slate-35); letter-spacing: 0.08em;
+  text-transform: uppercase; font-family: var(--mono);
+}
+.archive-card-actions { display: flex; gap: 6px; align-items: center; }
+.archive-copy-all {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 3px;
+  background: var(--lime-10); border: var(--border-lime);
+  color: var(--lime-70); transition: background 0.2s;
+}
+.archive-copy-all:hover { background: var(--lime-20); }
+.archive-delete {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 3px;
+  background: transparent; border: var(--border);
+  color: rgba(239,68,68,0.45); transition: color 0.2s, border-color 0.2s;
+}
+.archive-delete:hover { color: rgba(239,68,68,0.7); border-color: rgba(239,68,68,0.3); }
+
+.archive-card-body {
+  display: none; padding: 0 16px 14px;
+  flex-direction: column; gap: 14px;
+  border-top: var(--border-dim);
+}
+.archive-card-body.open { display: flex; }
+
+.archive-section { display: flex; flex-direction: column; gap: 8px; }
+.archive-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.archive-section-title {
+  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--slate-35); padding-top: 12px;
+}
+.archive-copy-btn {
+  font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 3px; margin-top: 10px;
+  background: transparent; border: var(--border);
+  color: var(--slate-35); transition: color 0.2s, border-color 0.2s;
+}
+.archive-copy-btn:hover { color: var(--lime-70); border-color: var(--lime-30); }
+.archive-copy-btn.copied { color: var(--lime); border-color: var(--lime-30); }
+
+.archive-text-block {
+  font-size: 11px; font-weight: 300; line-height: 1.65;
+  color: var(--w-60); padding: 10px 12px;
+  background: var(--w-04); border: var(--border-dim);
+  border-radius: var(--radius); white-space: pre-wrap;
+}
+
+.archive-shot-grid {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.archive-shot-item {
+  background: var(--w-04); border: var(--border-dim);
+  border-radius: var(--radius); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.archive-shot-num {
+  font-size: 9px; color: var(--lime-50); font-family: var(--mono);
+  letter-spacing: 0.08em;
+}
+.archive-prompt-row { display: flex; flex-direction: column; gap: 3px; }
+.archive-prompt-key {
+  font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--slate-25);
+}
+.archive-prompt-val {
+  font-size: 10.5px; font-weight: 300; color: var(--w-50);
+  line-height: 1.5;
+}
+
+/* ─── SETTINGS MODAL ─────────────────────────────────── */
+#settings-modal {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85); z-index: 100;
+  align-items: center; justify-content: center;
+}
+#settings-modal.open { display: flex; }
+.modal-card {
+  background: #0a0a0a; border: var(--border);
+  border-radius: 10px; padding: 28px 28px 24px;
+  width: 360px; display: flex; flex-direction: column; gap: 20px;
+}
+.modal-title {
+  font-size: 12px; font-weight: 400; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--w-60);
+}
+.modal-desc { font-size: 11px; font-weight: 300; color: var(--slate-45); line-height: 1.6; }
+.modal-field { display: flex; flex-direction: column; gap: 6px; }
+.modal-label {
+  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--slate-35);
+}
+.modal-input {
+  background: var(--w-04); border: var(--border);
+  border-radius: var(--radius); padding: 8px 12px;
+  font-size: 11px; color: var(--w-80); outline: none;
+  transition: border-color 0.2s; font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+.modal-input:focus { border-color: var(--w-20); }
+.modal-input::placeholder { color: var(--slate-25); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-save {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 7px 18px; border-radius: 4px;
+  background: var(--lime-10); border: var(--border-lime);
+  color: var(--lime-85);
+}
+.modal-save:hover { background: var(--lime-20); }
+
+/* ─── TOAST ──────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px);
+  background: #111; border: var(--border); border-radius: 6px;
+  padding: 8px 16px; font-size: 11px; color: var(--w-60);
+  opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 200;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ─── SCROLLBAR GLOBAL ───────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--w-08); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- NAV -->
+  <nav id="nav">
+    <div class="nav-logo">
+      <span class="nav-logo-name">Auteur</span>
+      <span class="nav-logo-tag">Articulate your Intent</span>
+    </div>
+    <div class="nav-right">
+      <button class="nav-btn" id="btn-settings" onclick="openSettings()">Settings</button>
+      <button class="nav-btn" id="btn-archive" onclick="toggleView('archive')">Archive</button>
+      <button class="nav-btn" id="btn-pipeline" onclick="toggleView('pipeline')" style="display:none">Pipeline</button>
+      <div class="nav-session">
+        <div class="nav-dot" id="nav-dot"></div>
+        <span class="nav-session-id" id="session-label">—</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- CHAT PANEL -->
+    <div id="chat-panel">
+      <div class="panel-header">
+        <span class="panel-label">Director</span>
+      </div>
+      <div id="messages"></div>
+      <div class="chat-input-area">
+        <div class="input-box">
+          <textarea id="chat-input" rows="1" placeholder="명령 또는 확정 신호 입력" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button id="send-btn" onclick="sendMessage()">
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+              <path d="M1 7L7 1M7 1H2M7 1V6" stroke="rgba(232,255,87,0.72)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIPELINE VIEW -->
+    <div id="pipeline-view" style="flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+
+      <div id="pipeline-panel" style="flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+        <div class="pipeline-header">
+          <span class="panel-label">Pipeline</span>
+          <span class="entry-badge" id="entry-badge">—</span>
+        </div>
+
+        <div id="agents">
+          <div class="agent-row pending" id="agent-planner">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Planner &amp; Director</span>
+            <span class="agent-status">Pending</span>
+          </div>
+          <div class="agent-row pending" id="agent-research">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Research</span>
+            <span class="agent-status">Pending</span>
+          </div>
+          <div class="agent-row pending" id="agent-script">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Script</span>
+            <span class="agent-status">Pending</span>
+          </div>
+          <div class="agent-row pending" id="agent-moderation">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Moderation</span>
+            <span class="agent-status">Pending</span>
+          </div>
+          <div class="agent-row pending" id="agent-visual">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Visual</span>
+            <span class="agent-status">Pending</span>
+          </div>
+          <div class="agent-row pending" id="agent-audio">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Audio</span>
+            <span class="agent-status">Pending</span>
+          </div>
+          <div class="agent-row pending" id="agent-assembler">
+            <div class="agent-dot"></div>
+            <span class="agent-name">Assembler</span>
+            <span class="agent-status">Pending</span>
+          </div>
+        </div>
+
+        <div id="output-card">
+          <div class="output-card-header">
+            <span class="output-card-title" id="output-title">Current Agent Output</span>
+          </div>
+          <div class="output-card-body" id="output-body">
+            <div class="output-empty">
+              <span class="output-empty-text">파이프라인 대기 중</span>
+            </div>
+          </div>
+          <div class="output-actions" id="output-actions" style="display:none">
+            <button class="btn-confirm" id="btn-confirm" onclick="handleConfirm()">확정</button>
+            <button class="btn-secondary" id="btn-revise" onclick="handleRevise()">수정 요청</button>
+          </div>
+        </div>
+
+        <!-- PEEK BAR -->
+        <button id="peek-bar" onclick="toggleCodex()">
+          <div class="peek-left">
+            <div class="peek-icon"></div>
+            <span class="peek-label">Live Codex</span>
+          </div>
+          <span id="peek-arrow">▲</span>
+        </button>
+
+        <!-- LIVE CODEX -->
+        <div id="live-codex">
+          <div class="codex-inner">
+            <pre class="codex-pre" id="codex-content">—</pre>
+          </div>
+        </div>
+
+        <div class="pipeline-spacer"></div>
+      </div>
+    </div>
+
+    <!-- ARCHIVE VIEW -->
+    <div id="archive-view">
+      <div class="archive-header">
+        <span class="archive-title">Archive</span>
+        <span class="archive-count" id="archive-count">0 sessions</span>
+      </div>
+      <div id="archive-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settings-modal">
+  <div class="modal-card">
+    <span class="modal-title">Settings</span>
+    <p class="modal-desc">API 키를 입력하세요. 브라우저 localStorage에만 저장됩니다.</p>
+    <div class="modal-field">
+      <label class="modal-label">Claude API Key</label>
+      <input class="modal-input" type="password" id="input-claude-key" placeholder="sk-ant-...">
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Gemini API Key</label>
+      <input class="modal-input" type="password" id="input-gemini-key" placeholder="AIza...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeSettings()">취소</button>
+      <button class="modal-save" onclick="saveSettings()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ─── CONSTANTS ──────────────────────────────────────────
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const GEMINI_MODEL = 'gemini-3-flash-preview';
+const LS_CLAUDE = 'claude_key';
+const LS_GEMINI = 'gemini_key';
+const LS_ARCHIVE = 'auteur_archive';
+
+// ─── STATE ───────────────────────────────────────────────
+let sharedState = null;
+let chatHistory = [];
+let currentView = 'pipeline';
+let codexOpen = false;
+let isProcessing = false;
+
+const AGENT_IDS = ['planner','research','script','moderation','visual','audio','assembler'];
+
+// ─── INIT ────────────────────────────────────────────────
+function init() {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  const geminiKey = localStorage.getItem(LS_GEMINI);
+  if (!claudeKey || !geminiKey) {
+    openSettings();
+  }
+  renderArchive();
+  addMessage('system', 'Auteur 초기화 완료. 브랜드, 제품, 원하는 영상의 감정적 방향을 자유롭게 말씀해 주세요.');
+}
+
+// ─── SESSION ────────────────────────────────────────────
+function newSession(entryPoint) {
+  const id = 'AUT-' + String(Math.floor(Math.random()*9000)+1000);
+  sharedState = {
+    session: {
+      session_id: id,
+      created_at: new Date().toISOString(),
+      entry_point: entryPoint,
+      current_agent: 'planner',
+      agent_status: {
+        planner: 'running', research: 'pending', script: 'pending',
+        moderation: 'pending', visual: 'pending', audio: 'pending', assembler: 'pending'
+      },
+      hitl_pending: false,
+      hitl_checkpoint: null
+    },
+    planner_director: {
+      brand: { name: null, product: null, category: null },
+      reference_input: { images: [], codex_feed: null, brief_text: null },
+      director_intent: { target_emotion: null, product_role: null, reference_tone: null, confirmed: false },
+      execution_plan: { agent_sequence: ['research','script','moderation','visual','audio','assembler'], scene_count_guide: 5 }
+    },
+    research: { visual_bible: { character: null, space: null, product_spec: null, tone: null, confirmed: false }, brand_context: null },
+    script: { scenes: [], coherence_check: { is_coherent: null, issues: [] }, confirmed: false, revision_history: [] },
+    moderation: { pass: null, flags: [], coherence_flags: [], resolution: { action: null, return_to_agent: null, heechan_reviewed: false } },
+    visual: { shots: [] },
+    audio: { narration: { type: null, script_text: null, voice_direction: null, recommended_tool: null, timing: [] }, bgm: { target_bpm: null, mood_keywords: [], scene_timing: [], recommended_libraries: ['Epidemic Sound','Artlist','Pixabay Music'] } },
+    assembler: { output: [], bgm_brief: null, narration_file_note: null }
+  };
+
+  document.getElementById('session-label').textContent = id;
+  document.getElementById('nav-dot').classList.add('active');
+  document.getElementById('entry-badge').textContent = 'Entry ' + entryPoint;
+  setAgentStatus('planner', 'running');
+  updateCodex();
+  return id;
+}
+
+// ─── AGENT STATUS ────────────────────────────────────────
+function setAgentStatus(agentKey, status) {
+  const el = document.getElementById('agent-' + agentKey);
+  if (!el) return;
+  el.className = 'agent-row ' + status;
+  const statusEl = el.querySelector('.agent-status');
+  const labels = { pending:'Pending', running:'Running', done:'Done', failed:'Failed' };
+  if (statusEl) statusEl.textContent = labels[status] || status;
+  if (sharedState) sharedState.session.agent_status[agentKey] = status;
+}
+
+// ─── MESSAGES ────────────────────────────────────────────
+function addMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const labelMap = { user:'Heechan', agent:'Auteur', system:'System', hitl:'Auteur', error:'System' };
+  const bubbleClass = { user:'', agent:'agent', system:'system', hitl:'hitl', error:'error' };
+  div.innerHTML = `
+    <span class="msg-label ${role === 'user' ? 'user' : ''}">${labelMap[role] || role}</span>
+    <div class="msg-bubble ${bubbleClass[role] || ''}">${text}</div>
+  `;
+  document.getElementById('messages').appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  return div;
+}
+
+function showTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg'; div.id = 'typing-msg';
+  div.innerHTML = `
+    <span class="msg-label">Auteur</span>
+    <div class="msg-bubble agent">
+      <div class="typing-indicator">
+        <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+      </div>
+    </div>`;
+  document.getElementById('messages').appendChild(div);
+  div.scrollIntoView({ behavior:'smooth', block:'end' });
+}
+function removeTyping() {
+  const el = document.getElementById('typing-msg');
+  if (el) el.remove();
+}
+
+// ─── OUTPUT CARD ─────────────────────────────────────────
+function setOutputCard(title, bodyHtml, showActions = false) {
+  document.getElementById('output-title').textContent = title;
+  document.getElementById('output-body').innerHTML = bodyHtml;
+  const actionsEl = document.getElementById('output-actions');
+  actionsEl.style.display = showActions ? 'flex' : 'none';
+}
+
+function showOutputEmpty(msg = '파이프라인 대기 중') {
+  setOutputCard('Current Agent Output',
+    `<div class="output-empty"><span class="output-empty-text">${msg}</span></div>`, false);
+}
+
+// ─── PLANNER SYSTEM PROMPT ───────────────────────────────
+function buildPlannerSystemPrompt() {
+  return `You are the Planner & Director agent of Auteur — an AI-powered cinematic production pipeline.
+
+Your role: collect brand info and Director's Intent through natural multi-turn conversation in Korean.
+
+You need to extract:
+1. brand.name — brand name
+2. brand.product — specific product
+3. brand.category — luxury / fashion / beauty / auto / tech / lifestyle
+4. director_intent.target_emotion — the emotion the audience should feel
+5. director_intent.product_role — how the product appears (e.g., sole subject, supporting element, metaphor)
+6. director_intent.reference_tone — optional stylistic reference
+7. entry_point — A (no direction), B (has direction), C (has CODEX feed)
+8. scene_count_guide — suggested number of scenes (default 5)
+
+Rules:
+- Converse naturally in Korean. Do not use numbered lists or headers.
+- Ask follow-up questions to deepen understanding. Max 2 questions per turn.
+- When you have enough to confirm all required fields, output EXACTLY this JSON block at the END of your response (after your conversational text):
+
+INTENT_CONFIRMED::{
+  "brand": {"name":"...","product":"...","category":"..."},
+  "director_intent": {"target_emotion":"...","product_role":"...","reference_tone":null},
+  "entry_point": "A|B|C",
+  "scene_count_guide": 5
+}
+
+Do not output this JSON until you have confirmed all required fields.
+Current state: ${JSON.stringify(sharedState?.planner_director || {})}`;
+}
+
+// ─── SEND MESSAGE ────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || isProcessing) return;
+  input.value = ''; input.style.height = '';
+
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  if (!claudeKey) { openSettings(); return; }
+
+  addMessage('user', text);
+  isProcessing = true;
+
+  if (!sharedState) {
+    const ep = detectEntryPoint(text);
+    newSession(ep);
+    addMessage('system', `Entry Point ${ep} — Planner & Director 에이전트 시작`);
+  }
+
+  chatHistory.push({ role: 'user', content: text });
+  showTyping();
+
+  try {
+    const resp = await callClaude(buildPlannerSystemPrompt(), chatHistory, claudeKey);
+    removeTyping();
+
+    const { conversational, intentData } = parsePlannerResponse(resp);
+    addMessage('agent', conversational);
+    chatHistory.push({ role: 'assistant', content: resp });
+
+    if (intentData) {
+      applyIntentConfirmed(intentData);
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', '에이전트 호출 실패: ' + e.message);
+  }
+  isProcessing = false;
+}
+
+function detectEntryPoint(text) {
+  if (text.includes('CODEX') || text.includes('codex') || text.includes('레퍼런스 분석')) return 'C';
+  if (text.length > 50 || text.includes('방향') || text.includes('느낌') || text.includes('감정')) return 'B';
+  return 'A';
+}
+
+function parsePlannerResponse(resp) {
+  const marker = 'INTENT_CONFIRMED::';
+  const idx = resp.indexOf(marker);
+  if (idx === -1) return { conversational: resp, intentData: null };
+
+  const conversational = resp.substring(0, idx).trim();
+  const jsonStr = resp.substring(idx + marker.length).trim();
+  try {
+    const intentData = JSON.parse(jsonStr);
+    return { conversational, intentData };
+  } catch(e) {
+    return { conversational: resp, intentData: null };
+  }
+}
+
+function applyIntentConfirmed(data) {
+  sharedState.planner_director.brand = data.brand;
+  sharedState.planner_director.director_intent = { ...data.director_intent, confirmed: true };
+  sharedState.planner_director.execution_plan.scene_count_guide = data.scene_count_guide || 5;
+  sharedState.session.entry_point = data.entry_point || 'B';
+  sharedState.session.hitl_pending = true;
+  sharedState.session.hitl_checkpoint = 'planner';
+  document.getElementById('entry-badge').textContent = 'Entry ' + sharedState.session.entry_point;
+
+  updateCodex();
+
+  const intent = data.director_intent;
+  setOutputCard(
+    'Planner & Director — Intent Confirmed',
+    `<div class="output-field"><span class="output-key">Brand</span><span class="output-val">${data.brand.name} — ${data.brand.product}</span></div>
+     <div class="output-divider"></div>
+     <div class="output-field"><span class="output-key">Category</span><span class="output-val">${data.brand.category}</span></div>
+     <div class="output-divider"></div>
+     <div class="output-field"><span class="output-key">Target Emotion</span><span class="output-val">${intent.target_emotion}</span></div>
+     <div class="output-divider"></div>
+     <div class="output-field"><span class="output-key">Product Role</span><span class="output-val">${intent.product_role}</span></div>
+     ${intent.reference_tone ? `<div class="output-divider"></div><div class="output-field"><span class="output-key">Reference Tone</span><span class="output-val">${intent.reference_tone}</span></div>` : ''}`,
+    true
+  );
+
+  addMessage('hitl', 'Director\'s Intent가 확정됐습니다. 위 내용을 확인하고 [확정]을 눌러주세요. 수정이 필요하면 [수정 요청]을 눌러주세요.');
+}
+
+// ─── HITL HANDLERS ───────────────────────────────────────
+function handleConfirm() {
+  const checkpoint = sharedState?.session?.hitl_checkpoint;
+  if (!checkpoint) return;
+
+  sharedState.session.hitl_pending = false;
+  sharedState.session.hitl_checkpoint = null;
+
+  if (checkpoint === 'planner') {
+    setAgentStatus('planner', 'done');
+    sharedState.session.current_agent = 'research';
+    document.getElementById('output-actions').style.display = 'none';
+    addMessage('system', 'Intent 확정 완료. Research 에이전트가 준비되면 Gemini가 Visual Bible을 생성합니다.');
+    setAgentStatus('research', 'running');
+    updateCodex();
+    runResearchAgent();
+  } else if (checkpoint === 'research') {
+    setAgentStatus('research', 'done');
+    sharedState.research.visual_bible.confirmed = true;
+    sharedState.session.current_agent = 'script';
+    document.getElementById('output-actions').style.display = 'none';
+    addMessage('system', 'Visual Bible 확정. Script 에이전트 시작합니다.');
+    setAgentStatus('script', 'running');
+    updateCodex();
+    runScriptAgent();
+  } else if (checkpoint === 'script') {
+    setAgentStatus('script', 'done');
+    sharedState.script.confirmed = true;
+    sharedState.session.current_agent = 'moderation';
+    document.getElementById('output-actions').style.display = 'none';
+    addMessage('system', 'Script 확정. Moderation 에이전트 시작합니다.');
+    setAgentStatus('moderation', 'running');
+    updateCodex();
+    runModerationAgent();
+  }
+}
+
+function handleRevise() {
+  const checkpoint = sharedState?.session?.hitl_checkpoint;
+  if (!checkpoint) return;
+  document.getElementById('output-actions').style.display = 'none';
+  sharedState.session.hitl_pending = false;
+  sharedState.session.hitl_checkpoint = null;
+  addMessage('hitl', '수정 요청을 받았습니다. 어떤 부분을 바꾸고 싶으신지 말씀해 주세요.');
+}
+
+// ─── RESEARCH AGENT ──────────────────────────────────────
+async function runResearchAgent() {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  if (!claudeKey) return;
+  isProcessing = true; showTyping();
+
+  const systemPrompt = `You are the Research Agent of Auteur. Generate a Visual Bible for the production.
+Based on the Director's Intent provided, create a concise Visual Bible with these fields:
+- character: who appears (or null if object-only)
+- space: location/environment description
+- product_spec: product physical description (material, color, form)
+- tone: overall visual/emotional tone
+- brand_context: brief brand cultural context
+
+Respond ONLY with this JSON (no other text):
+{
+  "visual_bible": {
+    "character": "...",
+    "space": "...",
+    "product_spec": "...",
+    "tone": "...",
+    "confirmed": false
+  },
+  "brand_context": "..."
+}`;
+
+  const userMsg = `Director's Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
+    const parsed = safeParseJSON(resp);
+    if (parsed && parsed.visual_bible) {
+      sharedState.research = parsed;
+      sharedState.session.hitl_pending = true;
+      sharedState.session.hitl_checkpoint = 'research';
+      updateCodex();
+
+      const vb = parsed.visual_bible;
+      setOutputCard(
+        'Research — Visual Bible Draft',
+        `<div class="output-field"><span class="output-key">Character</span><span class="output-val">${vb.character || '없음 — 오브젝트 단독'}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Space</span><span class="output-val">${vb.space}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Product Spec</span><span class="output-val">${vb.product_spec || '—'}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Tone</span><span class="output-val">${vb.tone}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Brand Context</span><span class="output-val">${parsed.brand_context || '—'}</span></div>`,
+        true
+      );
+      addMessage('hitl', 'Visual Bible 초안이 생성됐습니다. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.');
+    } else {
+      addMessage('error', 'Visual Bible 파싱 실패. 다시 시도합니다.');
+      setAgentStatus('research', 'failed');
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', 'Research 에이전트 오류: ' + e.message);
+    setAgentStatus('research', 'failed');
+  }
+  isProcessing = false;
+}
+
+// ─── SCRIPT AGENT ────────────────────────────────────────
+async function runScriptAgent() {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  if (!claudeKey) return;
+  isProcessing = true; showTyping();
+
+  const sceneCount = sharedState.planner_director.execution_plan.scene_count_guide;
+  const systemPrompt = `You are the Script Agent of Auteur. Write a scene-by-scene script.
+Use the Visual Bible and Director's Intent to write exactly ${sceneCount} scenes.
+Each scene must have emotional purpose — ask "why does this scene exist?".
+Include continuity links between scenes.
+
+Respond ONLY with this JSON:
+{
+  "scenes": [
+    {
+      "scene_n": 1,
+      "space": "...",
+      "subject": "...",
+      "action": "...",
+      "emotion": "...",
+      "dialogue": null,
+      "camera": "...",
+      "continuity": {"from_previous": null, "to_next": "..."}
+    }
+  ],
+  "coherence_check": {
+    "is_coherent": true,
+    "issues": []
+  }
+}`;
+
+  const userMsg = `Visual Bible: ${JSON.stringify(sharedState.research.visual_bible)}
+Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+Brand Context: ${sharedState.research.brand_context}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
+    const parsed = safeParseJSON(resp);
+    if (parsed && parsed.scenes) {
+      sharedState.script.scenes = parsed.scenes;
+      sharedState.script.coherence_check = parsed.coherence_check || { is_coherent: true, issues: [] };
+      sharedState.session.hitl_pending = true;
+      sharedState.session.hitl_checkpoint = 'script';
+      updateCodex();
+
+      let scenesHtml = parsed.scenes.map(s =>
+        `<div class="scene-card">
+          <span class="scene-num">Scene ${s.scene_n}</span>
+          <div class="output-field"><span class="output-key">Space</span><span class="output-val">${s.space}</span></div>
+          <div class="output-field"><span class="output-key">Action</span><span class="output-val">${s.action}</span></div>
+          <div class="output-field"><span class="output-key">Emotion</span><span class="output-val">${s.emotion}</span></div>
+          ${s.camera ? `<div class="output-field"><span class="output-key">Camera</span><span class="output-val">${s.camera}</span></div>` : ''}
+        </div>`
+      ).join('');
+
+      setOutputCard('Script — Scene Breakdown', scenesHtml, true);
+      addMessage('hitl', `씬 ${parsed.scenes.length}개가 작성됐습니다. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
+    } else {
+      addMessage('error', 'Script 파싱 실패.');
+      setAgentStatus('script', 'failed');
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', 'Script 에이전트 오류: ' + e.message);
+    setAgentStatus('script', 'failed');
+  }
+  isProcessing = false;
+}
+
+// ─── MODERATION AGENT ────────────────────────────────────
+async function runModerationAgent() {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  if (!claudeKey) return;
+  isProcessing = true; showTyping();
+
+  const systemPrompt = `You are the Moderation Agent of Auteur. QA the script against Director's Intent.
+Check each scene for: intent alignment, coherence between scenes, and emotional consistency.
+
+Respond ONLY with this JSON:
+{
+  "pass": true,
+  "flags": [],
+  "coherence_flags": [],
+  "resolution": {
+    "action": "pass",
+    "return_to_agent": null,
+    "heechan_reviewed": false
+  }
+}
+If issues exist, set pass:false, list flags with severity (low/medium/high) and suggested_fix and intent_delta.`;
+
+  const userMsg = `Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+Script: ${JSON.stringify(sharedState.script.scenes)}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
+    const parsed = safeParseJSON(resp);
+    if (parsed) {
+      sharedState.moderation = parsed;
+      sharedState.moderation.resolution.heechan_reviewed = false;
+      updateCodex();
+
+      if (parsed.pass) {
+        setAgentStatus('moderation', 'done');
+        addMessage('system', 'Moderation 통과 — Director\'s Intent 부합 확인. Visual 에이전트 시작합니다.');
+        setAgentStatus('visual', 'running');
+        sharedState.session.current_agent = 'visual';
+        updateCodex();
+        runVisualAgent();
+      } else {
+        const flagCount = (parsed.flags?.length || 0) + (parsed.coherence_flags?.length || 0);
+        const flagsHtml = (parsed.flags || []).map(f =>
+          `<div class="output-field">
+            <span class="output-key">Scene ${f.scene_n} — ${f.severity?.toUpperCase()}</span>
+            <span class="output-val">${f.issue}</span>
+            ${f.suggested_fix ? `<span class="output-val" style="color:var(--slate-45);font-size:10.5px">→ ${f.suggested_fix}</span>` : ''}
+          </div><div class="output-divider"></div>`
+        ).join('');
+
+        setOutputCard(
+          `Moderation — ${flagCount} Flag${flagCount > 1 ? 's' : ''} Detected`,
+          flagsHtml || '<div class="output-empty"><span class="output-empty-text">플래그 없음</span></div>',
+          true
+        );
+        document.getElementById('btn-confirm').textContent = '무시하고 진행';
+        document.getElementById('btn-revise').textContent = 'Script 재작성';
+        sharedState.session.hitl_pending = true;
+        sharedState.session.hitl_checkpoint = 'moderation_flag';
+        addMessage('hitl', `Moderation이 ${flagCount}개 플래그를 발견했습니다. 확인 후 진행 또는 Script 재작성을 선택하세요.`);
+        document.getElementById('output-actions').style.display = 'flex';
+      }
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', 'Moderation 에이전트 오류: ' + e.message);
+    setAgentStatus('moderation', 'failed');
+  }
+  isProcessing = false;
+}
+
+// ─── VISUAL AGENT ────────────────────────────────────────
+async function runVisualAgent() {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  if (!claudeKey) return;
+  isProcessing = true; showTyping();
+
+  const systemPrompt = `You are the Visual Agent of Auteur. Generate T2I and I2V prompts for each scene.
+For each scene, create 1-2 shots with:
+- anchor: fixed visual elements from Visual Bible
+- thread: continuity elements carrying across shots  
+- delta: what changes in this shot
+- t2i.higgsfield and t2i.freepik: platform-specific T2I prompts (English, cinematic, technical)
+- i2v.higgsfield and i2v.freepik: I2V motion prompts
+- camera_movement: specific camera instruction
+- motion_intensity: subtle / moderate / dynamic
+- transition_out: cut / fade / match_cut / smash_cut
+
+Respond ONLY with JSON:
+{"shots": [...]}`;
+
+  const userMsg = `Scenes: ${JSON.stringify(sharedState.script.scenes)}
+Visual Bible: ${JSON.stringify(sharedState.research.visual_bible)}
+Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
+    const parsed = safeParseJSON(resp);
+    if (parsed && parsed.shots) {
+      sharedState.visual.shots = parsed.shots.map((s,i) => ({ shot_n: i+1, ...s }));
+      setAgentStatus('visual', 'done');
+      sharedState.session.current_agent = 'audio';
+      updateCodex();
+      addMessage('system', `Shot ${parsed.shots.length}개 생성 완료. Audio 에이전트 시작합니다.`);
+      setAgentStatus('audio', 'running');
+      runAudioAgent();
+    } else {
+      addMessage('error', 'Visual 에이전트 파싱 실패.');
+      setAgentStatus('visual', 'failed');
+      isProcessing = false;
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', 'Visual 에이전트 오류: ' + e.message);
+    setAgentStatus('visual', 'failed');
+    isProcessing = false;
+  }
+}
+
+// ─── AUDIO AGENT ─────────────────────────────────────────
+async function runAudioAgent() {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  if (!claudeKey) return;
+
+  const systemPrompt = `You are the Audio Agent of Auteur. Recommend audio direction only (no API calls).
+
+Respond ONLY with JSON:
+{
+  "narration": {
+    "type": "dialogue|voiceover|none",
+    "script_text": null,
+    "voice_direction": null,
+    "recommended_tool": null,
+    "timing": []
+  },
+  "bgm": {
+    "target_bpm": 90,
+    "mood_keywords": ["cinematic","..."],
+    "scene_timing": [{"scene_n":1,"duration":"3-5s","beat_cue":"intro"}],
+    "recommended_libraries": ["Epidemic Sound","Artlist","Pixabay Music"]
+  }
+}`;
+
+  const userMsg = `Scenes: ${JSON.stringify(sharedState.script.scenes)}
+Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    const parsed = safeParseJSON(resp);
+    if (parsed) sharedState.audio = parsed;
+    setAgentStatus('audio', 'done');
+    sharedState.session.current_agent = 'assembler';
+    updateCodex();
+    addMessage('system', 'Audio 추천 완료. Assembler 시작합니다.');
+    setAgentStatus('assembler', 'running');
+    runAssembler();
+  } catch(e) {
+    addMessage('error', 'Audio 에이전트 오류: ' + e.message);
+    setAgentStatus('audio', 'failed');
+    isProcessing = false;
+  }
+}
+
+// ─── ASSEMBLER ───────────────────────────────────────────
+function runAssembler() {
+  try {
+    const output = sharedState.visual.shots.map(shot => ({
+      shot_n: shot.shot_n,
+      scene_n: shot.scene_n,
+      t2i_prompt: shot.t2i || {},
+      i2v_prompt: shot.i2v || {},
+      reference_image_instruction: shot.anchor || '',
+      audio_note: null
+    }));
+
+    sharedState.assembler.output = output;
+    sharedState.assembler.bgm_brief = sharedState.audio?.bgm
+      ? `BPM ${sharedState.audio.bgm.target_bpm} — ${(sharedState.audio.bgm.mood_keywords||[]).join(', ')}`
+      : null;
+
+    setAgentStatus('assembler', 'done');
+    sharedState.session.current_agent = 'assembler';
+    updateCodex();
+
+    // Build final output card
+    let shotsHtml = sharedState.visual.shots.map(s => {
+      const t2i = s.t2i || {};
+      const i2v = s.i2v || {};
+      return `<div class="scene-card">
+        <span class="scene-num">Shot ${s.shot_n} — Scene ${s.scene_n}</span>
+        ${t2i.higgsfield ? `<div class="output-field"><span class="output-key">T2I · Higgsfield</span><span class="output-val">${t2i.higgsfield}</span></div>` : ''}
+        ${t2i.freepik ? `<div class="output-field"><span class="output-key">T2I · Freepik</span><span class="output-val">${t2i.freepik}</span></div>` : ''}
+        ${i2v.higgsfield ? `<div class="output-field"><span class="output-key">I2V · Higgsfield</span><span class="output-val">${i2v.higgsfield}</span></div>` : ''}
+        <div class="output-field"><span class="output-key">Camera</span><span class="output-val">${s.camera_movement || '—'}</span></div>
+        <div class="output-field"><span class="output-key">Motion</span><span class="output-val">${s.motion_intensity || '—'} · Transition: ${s.transition_out || 'cut'}</span></div>
+      </div>`;
+    }).join('');
+
+    if (sharedState.assembler.bgm_brief) {
+      shotsHtml += `<div class="output-divider"></div>
+        <div class="output-field"><span class="output-key">BGM Direction</span><span class="output-val">${sharedState.assembler.bgm_brief}</span></div>`;
+    }
+
+    setOutputCard('Assembler — Final Output', shotsHtml, false);
+
+    // Show archive button
+    const actionsEl = document.getElementById('output-actions');
+    actionsEl.style.display = 'flex';
+    actionsEl.innerHTML = `
+      <button class="btn-confirm" onclick="archiveSession()">Archive</button>
+      <button class="btn-secondary" onclick="startNewSession()">New Session</button>
+    `;
+
+    document.getElementById('nav-dot').classList.remove('active');
+    document.getElementById('nav-dot').style.background = 'rgba(148,163,184,0.4)';
+    addMessage('system', '파이프라인 완료. [Archive]를 눌러 결과물을 저장하세요.');
+  } catch(e) {
+    addMessage('error', 'Assembler 오류: ' + e.message);
+    setAgentStatus('assembler', 'failed');
+  }
+  isProcessing = false;
+}
+
+// ─── ARCHIVE ─────────────────────────────────────────────
+function archiveSession() {
+  if (!sharedState) return;
+  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]');
+  const entry = {
+    saved_at: new Date().toISOString(),
+    session_id: sharedState.session.session_id,
+    brand_name: sharedState.planner_director?.brand?.name || '—',
+    product: sharedState.planner_director?.brand?.product || '—',
+    entry_point: sharedState.session.entry_point,
+    director_intent: sharedState.planner_director?.director_intent,
+    visual_bible: sharedState.research?.visual_bible,
+    scenes: sharedState.script?.scenes || [],
+    shots: sharedState.visual?.shots || [],
+    audio: sharedState.audio,
+    bgm_brief: sharedState.assembler?.bgm_brief
+  };
+  archives.unshift(entry);
+  localStorage.setItem(LS_ARCHIVE, JSON.stringify(archives));
+  showToast('Archive에 저장됐습니다');
+  renderArchive();
+}
+
+function renderArchive() {
+  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]');
+  const countEl = document.getElementById('archive-count');
+  const listEl = document.getElementById('archive-list');
+  if (countEl) countEl.textContent = `${archives.length} session${archives.length !== 1 ? 's' : ''}`;
+  if (!listEl) return;
+
+  if (archives.length === 0) {
+    listEl.innerHTML = `<div class="archive-empty">
+      <span class="archive-empty-title">아카이브 없음</span>
+      <span class="archive-empty-sub">파이프라인 완료 후 Archive 버튼으로 저장</span>
+    </div>`;
+    return;
+  }
+
+  listEl.innerHTML = archives.map((a, idx) => {
+    const date = new Date(a.saved_at).toLocaleDateString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+    const shotRows = (a.shots || []).map(s => {
+      const t = s.t2i || {};
+      const iv = s.i2v || {};
+      return `<div class="archive-shot-item">
+        <span class="archive-shot-num">Shot ${s.shot_n} — Scene ${s.scene_n}</span>
+        ${t.higgsfield ? `<div class="archive-prompt-row"><span class="archive-prompt-key">T2I · Higgsfield</span><span class="archive-prompt-val">${t.higgsfield}</span></div>` : ''}
+        ${t.freepik ? `<div class="archive-prompt-row"><span class="archive-prompt-key">T2I · Freepik</span><span class="archive-prompt-val">${t.freepik}</span></div>` : ''}
+        ${iv.higgsfield ? `<div class="archive-prompt-row"><span class="archive-prompt-key">I2V · Higgsfield</span><span class="archive-prompt-val">${iv.higgsfield}</span></div>` : ''}
+      </div>`;
+    }).join('');
+
+    const sceneText = (a.scenes || []).map(s =>
+      `[Scene ${s.scene_n}]\nSpace: ${s.space}\nAction: ${s.action}\nEmotion: ${s.emotion}${s.camera ? '\nCamera: '+s.camera : ''}`
+    ).join('\n\n');
+
+    const allPrompts = (a.shots || []).map(s => {
+      const t = s.t2i || {}; const iv = s.i2v || {};
+      return `[Shot ${s.shot_n}]\nT2I Higgsfield: ${t.higgsfield || ''}\nT2I Freepik: ${t.freepik || ''}\nI2V Higgsfield: ${iv.higgsfield || ''}`;
+    }).join('\n\n');
+
+    const allText = `AUTEUR ARCHIVE — ${a.brand_name} / ${a.product}\n${date}\n\n=== VISUAL BIBLE ===\n${JSON.stringify(a.visual_bible, null, 2)}\n\n=== SCRIPT ===\n${sceneText}\n\n=== PROMPTS ===\n${allPrompts}${a.bgm_brief ? '\n\n=== AUDIO ===\n' + a.bgm_brief : ''}`;
+
+    return `<div class="archive-card" id="acard-${idx}">
+      <div class="archive-card-header" onclick="toggleArchiveCard(${idx})">
+        <div class="archive-card-meta">
+          <span class="archive-card-brand">${a.brand_name} — ${a.product}</span>
+          <span class="archive-card-sub">${a.session_id} · ${date} · Entry ${a.entry_point}</span>
+        </div>
+        <div class="archive-card-actions">
+          <button class="archive-copy-all" onclick="event.stopPropagation(); copyText('${escapeForAttr(allText)}', this)">Copy All</button>
+          <button class="archive-delete" onclick="event.stopPropagation(); deleteArchive(${idx})">삭제</button>
+        </div>
+      </div>
+      <div class="archive-card-body" id="abody-${idx}">
+        <div class="archive-section">
+          <div class="archive-section-header">
+            <span class="archive-section-title">Visual Bible</span>
+            <button class="archive-copy-btn" onclick="copyText('${escapeForAttr(JSON.stringify(a.visual_bible, null, 2))}', this)">Copy</button>
+          </div>
+          <div class="archive-text-block">${formatJSON(a.visual_bible)}</div>
+        </div>
+        <div class="archive-section">
+          <div class="archive-section-header">
+            <span class="archive-section-title">Script — Scenes</span>
+            <button class="archive-copy-btn" onclick="copyText('${escapeForAttr(sceneText)}', this)">Copy</button>
+          </div>
+          <div class="archive-text-block">${escapeHtml(sceneText)}</div>
+        </div>
+        <div class="archive-section">
+          <div class="archive-section-header">
+            <span class="archive-section-title">Shot Prompts</span>
+            <button class="archive-copy-btn" onclick="copyText('${escapeForAttr(allPrompts)}', this)">Copy</button>
+          </div>
+          <div class="archive-shot-grid">${shotRows}</div>
+        </div>
+        ${a.bgm_brief ? `<div class="archive-section">
+          <div class="archive-section-header">
+            <span class="archive-section-title">Audio Direction</span>
+            <button class="archive-copy-btn" onclick="copyText('${escapeForAttr(a.bgm_brief)}', this)">Copy</button>
+          </div>
+          <div class="archive-text-block">${escapeHtml(a.bgm_brief)}</div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleArchiveCard(idx) {
+  const body = document.getElementById('abody-' + idx);
+  if (body) body.classList.toggle('open');
+}
+
+function deleteArchive(idx) {
+  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]');
+  archives.splice(idx, 1);
+  localStorage.setItem(LS_ARCHIVE, JSON.stringify(archives));
+  renderArchive();
+  showToast('삭제됐습니다');
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+    }
+    showToast('복사됐습니다');
+  });
+}
+
+function startNewSession() {
+  sharedState = null;
+  chatHistory = [];
+  document.getElementById('messages').innerHTML = '';
+  AGENT_IDS.forEach(id => setAgentStatus(id, 'pending'));
+  document.getElementById('session-label').textContent = '—';
+  document.getElementById('nav-dot').className = 'nav-dot';
+  document.getElementById('entry-badge').textContent = '—';
+  document.getElementById('output-actions').style.display = 'none';
+  showOutputEmpty();
+  addMessage('system', '새 세션 준비 완료. 브랜드와 제품을 말씀해 주세요.');
+}
+
+// ─── VIEW TOGGLE ──────────────────────────────────────────
+function toggleView(view) {
+  const pipelineView = document.getElementById('pipeline-view');
+  const archiveView = document.getElementById('archive-view');
+  const btnArchive = document.getElementById('btn-archive');
+  const btnPipeline = document.getElementById('btn-pipeline');
+
+  if (view === 'archive') {
+    pipelineView.style.display = 'none';
+    archiveView.classList.add('visible');
+    btnArchive.style.display = 'none';
+    btnPipeline.style.display = 'block';
+    renderArchive();
+  } else {
+    pipelineView.style.display = 'flex';
+    archiveView.classList.remove('visible');
+    btnArchive.style.display = 'block';
+    btnPipeline.style.display = 'none';
+  }
+}
+
+// ─── LIVE CODEX ───────────────────────────────────────────
+function toggleCodex() {
+  const panel = document.getElementById('live-codex');
+  const arrow = document.getElementById('peek-arrow');
+  const bar = document.getElementById('peek-bar');
+  codexOpen = !codexOpen;
+  panel.classList.toggle('open', codexOpen);
+  arrow.style.transform = codexOpen ? 'rotate(180deg)' : '';
+  bar.style.borderRadius = codexOpen ? '5px 5px 0 0' : '5px';
+}
+
+function updateCodex() {
+  if (!sharedState) return;
+  const slim = {
+    session: {
+      session_id: sharedState.session.session_id,
+      entry_point: sharedState.session.entry_point,
+      current_agent: sharedState.session.current_agent,
+      hitl_pending: sharedState.session.hitl_pending,
+      hitl_checkpoint: sharedState.session.hitl_checkpoint,
+      agent_status: sharedState.session.agent_status
+    },
+    director_intent: sharedState.planner_director?.director_intent,
+    brand: sharedState.planner_director?.brand,
+    visual_bible_confirmed: sharedState.research?.visual_bible?.confirmed,
+    scene_count: sharedState.script?.scenes?.length || 0,
+    shot_count: sharedState.visual?.shots?.length || 0
+  };
+  document.getElementById('codex-content').textContent = JSON.stringify(slim, null, 2);
+}
+
+// ─── SETTINGS ────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('input-claude-key').value = localStorage.getItem(LS_CLAUDE) || '';
+  document.getElementById('input-gemini-key').value = localStorage.getItem(LS_GEMINI) || '';
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+function saveSettings() {
+  const ck = document.getElementById('input-claude-key').value.trim();
+  const gk = document.getElementById('input-gemini-key').value.trim();
+  if (ck) localStorage.setItem(LS_CLAUDE, ck);
+  if (gk) localStorage.setItem(LS_GEMINI, gk);
+  closeSettings();
+  showToast('저장됐습니다');
+}
+
+// ─── CLAUDE API ───────────────────────────────────────────
+async function callClaude(systemPrompt, messages, apiKey) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: messages
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.content?.[0]?.text || '';
+}
+
+// ─── HELPERS ─────────────────────────────────────────────
+function safeParseJSON(str) {
+  const s = str.trim();
+  try { return JSON.parse(s); } catch {}
+  const m1 = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (m1) try { return JSON.parse(m1[1].trim()); } catch {}
+  const m2 = s.match(/(\{[\s\S]*\})/);
+  if (m2) try { return JSON.parse(m2[1]); } catch {}
+  return null;
+}
+
+function formatJSON(obj) {
+  if (!obj) return '—';
+  return escapeHtml(JSON.stringify(obj, null, 2));
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escapeForAttr(str) {
+  return String(str)
+    .replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+    .replace(/\n/g,'\\n').replace(/\r/g,'');
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 80) + 'px';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ─── START ───────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
