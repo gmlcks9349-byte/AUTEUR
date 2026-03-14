@@ -513,6 +513,7 @@ input, textarea { font-family: inherit; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+.gemini-analysis-body { display: none; }
 .gemini-analysis-body.gemini-open { display: block; }
 
 /* ─── SCROLLBAR GLOBAL ───────────────────────────────── */
@@ -868,9 +869,71 @@ async function sendMessage() {
   const claudeKey = localStorage.getItem(LS_CLAUDE);
   if (!claudeKey) { openSettings(); return; }
 
+  // ③ HITL 대기 중 차단 (revise_pending 상태가 아닐 때만)
+  if (sharedState?.session?.hitl_pending && !sharedState?.session?.revise_pending) {
+    showToast('먼저 [확정] 또는 [수정 요청]을 눌러주세요');
+    return;
+  }
+
   addMessage('user', text);
   isProcessing = true;
 
+  // ② revise_pending 라우팅
+  if (sharedState?.session?.revise_pending) {
+    const target = sharedState.session.revise_target;
+    sharedState.session.revise_pending = false;
+    sharedState.session.revise_target = null;
+
+    if (target === 'planner') {
+      // Planner: chatHistory에 추가 후 그대로 재호출
+      chatHistory.push({ role: 'user', content: text });
+      showTyping();
+      try {
+        const resp = await callClaude(buildPlannerSystemPrompt(), chatHistory, claudeKey);
+        removeTyping();
+        const { conversational, intentData } = parsePlannerResponse(resp);
+        addMessage('agent', conversational);
+        chatHistory.push({ role: 'assistant', content: resp });
+        if (intentData) applyIntentConfirmed(intentData);
+      } catch(e) {
+        removeTyping();
+        addMessage('error', '에이전트 호출 실패: ' + e.message);
+      }
+      isProcessing = false;
+      return;
+    }
+
+    if (target === 'research') {
+      // Research: 수정 지시를 userMsg에 append 후 재실행
+      setAgentStatus('research', 'running');
+      sharedState.session.current_agent = 'research';
+      addMessage('system', 'Visual Bible 재생성 중...');
+      updateCodex();
+      await runResearchAgentWithNote(text);
+      isProcessing = false;
+      return;
+    }
+
+    if (target === 'script') {
+      // Script: 수정 지시를 revision_history에 기록 후 재실행
+      if (!sharedState.script.revision_history) sharedState.script.revision_history = [];
+      sharedState.script.revision_history.push({
+        revision_n: sharedState.script.revision_history.length + 1,
+        triggered_by: 'manual',
+        note: text,
+        timestamp: new Date().toISOString()
+      });
+      setAgentStatus('script', 'running');
+      sharedState.session.current_agent = 'script';
+      updateCodex();
+      addMessage('system', 'Script 수정 중...');
+      await runScriptAgentWithNote(text);
+      isProcessing = false;
+      return;
+    }
+  }
+
+  // 기본 Planner 흐름
   if (!sharedState) {
     const ep = detectEntryPoint(text);
     newSession(ep);
@@ -883,14 +946,10 @@ async function sendMessage() {
   try {
     const resp = await callClaude(buildPlannerSystemPrompt(), chatHistory, claudeKey);
     removeTyping();
-
     const { conversational, intentData } = parsePlannerResponse(resp);
     addMessage('agent', conversational);
     chatHistory.push({ role: 'assistant', content: resp });
-
-    if (intentData) {
-      applyIntentConfirmed(intentData);
-    }
+    if (intentData) applyIntentConfirmed(intentData);
   } catch(e) {
     removeTyping();
     addMessage('error', '에이전트 호출 실패: ' + e.message);
@@ -948,9 +1007,17 @@ function applyIntentConfirmed(data) {
 }
 
 // ─── HITL HANDLERS ───────────────────────────────────────
+function resetHitlButtons() {
+  const btnConfirm = document.getElementById('btn-confirm');
+  const btnRevise = document.getElementById('btn-revise');
+  if (btnConfirm) btnConfirm.textContent = '확정';
+  if (btnRevise) btnRevise.textContent = '수정 요청';
+}
+
 function handleConfirm() {
   const checkpoint = sharedState?.session?.hitl_checkpoint;
   if (!checkpoint) return;
+  resetHitlButtons();
 
   sharedState.session.hitl_pending = false;
   sharedState.session.hitl_checkpoint = null;
@@ -998,6 +1065,7 @@ function handleConfirm() {
 function handleRevise() {
   const checkpoint = sharedState?.session?.hitl_checkpoint;
   if (!checkpoint) return;
+  resetHitlButtons();
   document.getElementById('output-actions').style.display = 'none';
   sharedState.session.hitl_pending = false;
   sharedState.session.hitl_checkpoint = null;
@@ -1021,6 +1089,21 @@ function handleRevise() {
     updateCodex();
     addMessage('system', `Script 재작성 시작 — Revision #${revisionEntry.revision_n}. Moderation 플래그 반영 중...`);
     runScriptAgent(true);
+  } else if (checkpoint === 'planner') {
+    // Planner 수정 — 채팅 입력 대기 후 재호출
+    sharedState.session.revise_pending = true;
+    sharedState.session.revise_target = 'planner';
+    addMessage('hitl', 'Planner 수정 모드. 어떤 부분을 바꾸고 싶으신지 말씀해 주세요. 입력 후 바로 반영됩니다.');
+  } else if (checkpoint === 'research') {
+    // Research 수정 — 채팅 입력 대기 후 Visual Bible 재생성
+    sharedState.session.revise_pending = true;
+    sharedState.session.revise_target = 'research';
+    addMessage('hitl', 'Visual Bible 수정 모드. 어떤 부분을 바꾸고 싶으신지 말씀해 주세요.');
+  } else if (checkpoint === 'script') {
+    // Script 수정 — 채팅 입력 대기 후 재생성
+    sharedState.session.revise_pending = true;
+    sharedState.session.revise_target = 'script';
+    addMessage('hitl', 'Script 수정 모드. 수정 지시를 입력해 주세요. (예: "3번 씬의 공간을 실내로 바꿔주세요")');
   } else {
     addMessage('hitl', '수정 요청을 받았습니다. 어떤 부분을 바꾸고 싶으신지 말씀해 주세요.');
   }
@@ -1116,12 +1199,12 @@ Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
          <div class="output-field"><span class="output-key">Brand Context</span><span class="output-val">${parsed.brand_context || '—'}</span></div>
          ${geminiAnalysis ? `<div class="output-divider"></div>
 <div class="output-field">
-  <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="(function(el){const body=el.nextElementSibling;const open=body.classList.toggle('gemini-open');el.querySelector('span:last-child').textContent=open?'접기 ▴':'펼치기 ▾';})(this)">
+  <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleGeminiAnalysis(this)">
     <span class="output-key" style="color:var(--lime-50)">Gemini Ref Analysis</span>
-    <span style="font-size:9px;color:var(--slate-35);font-family:var(--mono);letter-spacing:0.06em">펼치기 ▾</span>
+    <span class="gemini-toggle-label" style="font-size:9px;color:var(--slate-35);font-family:var(--mono);letter-spacing:0.06em">펼치기 ▾</span>
   </div>
-  <div class="gemini-analysis-body" style="display:none;margin-top:6px">
-    <span class="output-val" style="font-size:10.5px;color:var(--slate-45);white-space:pre-wrap">${geminiAnalysis}</span>
+  <div class="gemini-analysis-body" style="margin-top:6px">
+    <span class="output-val" style="font-size:10.5px;color:var(--slate-45);white-space:pre-wrap">${escapeHtml(geminiAnalysis)}</span>
   </div>
 </div>` : ''}`,
         true
@@ -1135,6 +1218,123 @@ Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
     removeTyping();
     addMessage('error', 'Research 에이전트 오류: ' + e.message);
     setAgentStatus('research', 'failed');
+  }
+  isProcessing = false;
+}
+
+// ─── REVISE HELPERS ──────────────────────────────────────
+async function runResearchAgentWithNote(note) {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  isProcessing = true; showTyping();
+
+  const codexFeed = localStorage.getItem('codex_feed') || '';
+  const codexSection = codexFeed ? `\n\nCODEX DIRECTORIAL REFERENCE:\n${codexFeed}` : '';
+
+  const systemPrompt = `You are the Research Agent of Auteur. Regenerate the Visual Bible incorporating the director's revision note.
+Fields: character, space, product_spec, tone, brand_context.${codexSection}
+
+Respond ONLY with this JSON:
+{
+  "visual_bible": { "character":"...","space":"...","product_spec":"...","tone":"...","confirmed":false },
+  "brand_context": "..."
+}`;
+
+  const userMsg = `Director's Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+Brand: ${JSON.stringify(sharedState.planner_director.brand)}
+Previous Visual Bible: ${JSON.stringify(sharedState.research?.visual_bible)}
+REVISION NOTE: ${note}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
+    const parsed = safeParseJSON(resp);
+    if (parsed && parsed.visual_bible) {
+      sharedState.research = { ...sharedState.research, ...parsed };
+      sharedState.session.hitl_pending = true;
+      sharedState.session.hitl_checkpoint = 'research';
+      updateCodex();
+      const vb = parsed.visual_bible;
+      setOutputCard(
+        'Research — Visual Bible (수정본)',
+        `<div class="output-field"><span class="output-key">Character</span><span class="output-val">${vb.character || '없음 — 오브젝트 단독'}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Space</span><span class="output-val">${vb.space}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Product Spec</span><span class="output-val">${vb.product_spec || '—'}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Tone</span><span class="output-val">${vb.tone}</span></div>
+         <div class="output-divider"></div>
+         <div class="output-field"><span class="output-key">Brand Context</span><span class="output-val">${parsed.brand_context || '—'}</span></div>`,
+        true
+      );
+      addMessage('hitl', 'Visual Bible 수정본이 생성됐습니다. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.');
+    } else {
+      addMessage('error', 'Visual Bible 재생성 파싱 실패.');
+      setAgentStatus('research', 'failed');
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', 'Research 수정 오류: ' + e.message);
+    setAgentStatus('research', 'failed');
+  }
+  isProcessing = false;
+}
+
+async function runScriptAgentWithNote(note) {
+  const claudeKey = localStorage.getItem(LS_CLAUDE);
+  isProcessing = true; showTyping();
+
+  const sceneCount = sharedState.planner_director.execution_plan.scene_count_guide;
+  const codexFeed = localStorage.getItem('codex_feed') || '';
+  const codexSection = codexFeed ? `\n\nCODEX DIRECTORIAL REFERENCE:\n${codexFeed}` : '';
+
+  const systemPrompt = `You are the Script Agent of Auteur. Rewrite the script incorporating the director's revision note.
+Write exactly ${sceneCount} scenes. Each scene must have emotional purpose.${codexSection}
+
+Respond ONLY with this JSON:
+{
+  "scenes": [{"scene_n":1,"space":"...","subject":"...","action":"...","emotion":"...","dialogue":null,"camera":"...","continuity":{"from_previous":null,"to_next":"..."}}],
+  "coherence_check": {"is_coherent":true,"issues":[]}
+}`;
+
+  const userMsg = `Visual Bible: ${JSON.stringify(sharedState.research.visual_bible)}
+Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+Brand Context: ${sharedState.research.brand_context}
+Previous Script: ${JSON.stringify(sharedState.script.scenes)}
+REVISION NOTE: ${note}`;
+
+  try {
+    const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
+    const parsed = safeParseJSON(resp);
+    if (parsed && parsed.scenes) {
+      sharedState.script.scenes = parsed.scenes;
+      sharedState.script.coherence_check = parsed.coherence_check || { is_coherent: true, issues: [] };
+      sharedState.session.hitl_pending = true;
+      sharedState.session.hitl_checkpoint = 'script';
+      updateCodex();
+
+      const scenesHtml = parsed.scenes.map(s =>
+        `<div class="scene-card">
+          <span class="scene-num">Scene ${s.scene_n}</span>
+          <div class="output-field"><span class="output-key">Space</span><span class="output-val">${s.space}</span></div>
+          <div class="output-field"><span class="output-key">Action</span><span class="output-val">${s.action}</span></div>
+          <div class="output-field"><span class="output-key">Emotion</span><span class="output-val">${s.emotion}</span></div>
+          ${s.camera ? `<div class="output-field"><span class="output-key">Camera</span><span class="output-val">${s.camera}</span></div>` : ''}
+        </div>`
+      ).join('');
+
+      const revN = sharedState.script.revision_history?.length || 0;
+      setOutputCard('Script — Scene Breakdown (수정본)', scenesHtml, true);
+      addMessage('hitl', `Script 수정본 (Revision #${revN})이 생성됐습니다. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
+    } else {
+      addMessage('error', 'Script 수정 파싱 실패.');
+      setAgentStatus('script', 'failed');
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('error', 'Script 수정 오류: ' + e.message);
+    setAgentStatus('script', 'failed');
   }
   isProcessing = false;
 }
@@ -1309,34 +1509,75 @@ async function runVisualAgent() {
     ? `\n\nCODEX DIRECTORIAL REFERENCE (apply this shooting sensibility to every prompt):\n${codexFeed}`
     : '';
 
-  const systemPrompt = `You are the Visual Agent of Auteur. Generate T2I and I2V prompts for each scene.
-For each scene, create 1-2 shots with:
-- anchor: fixed visual elements from Visual Bible
-- thread: continuity elements carrying across shots  
-- delta: what changes in this shot
-- t2i.higgsfield and t2i.freepik: platform-specific T2I prompts (English, cinematic, technical)
-- i2v.higgsfield and i2v.freepik: I2V motion prompts
-- camera_movement: specific camera instruction
-- motion_intensity: subtle / moderate / dynamic
-- transition_out: cut / fade / match_cut / smash_cut${codexSection}
+  const systemPrompt = `You are the Visual Agent of Auteur — a production-grade cinematographic instruction system.
+For each scene, generate 1-2 shots. Each shot is a complete production order document.
 
-Respond ONLY with JSON:
-{"shots": [...]}`;
+You MUST output exactly this JSON structure per shot. No deviations.
+
+{
+  "shots": [
+    {
+      "shot_n": 1,
+      "scene_n": 1,
+      "visual_anchor": "The immutable subject description — product/character fixed descriptor that never changes across all shots. E.g.: 'Gucci Attaché in GG Supreme canvas, gold G-shaped hook hardware, structured rectangular silhouette, warm off-white colorway'",
+      "t2i_master_prompt": "Complete T2I generation prompt in English. Include: subject position + action, space/environment, lighting quality and direction, color palette, depth of field, mood. Do NOT repeat visual_anchor verbatim — reference it naturally. Cinematic, technical language.",
+      "i2v_prompt": "Motion instruction in English. Format: '[START STATE] → [MOTION DIRECTIVE] → [END STATE]'. Describe what moves, how it moves, camera behavior, duration feel. E.g.: 'Product resting still on stone surface, warm light grazing hardware → ultra-slow dolly push, imperceptible zoom, dust particles drift → hardware fills lower third, fabric texture visible'",
+      "motion_parameters": {
+        "motion_intensity": 3,
+        "camera_motion": "subtle_push_in",
+        "duration_guide": "3-4s",
+        "seed_note": "Fix seed from Shot N output if visual continuity required"
+      },
+      "visual_inheritance": {
+        "carry_from_prev": "Specific instruction on what to take from previous shot's final frame as I2V start point. null for Shot 1.",
+        "lock_elements": ["product angle", "lighting direction", "background bokeh level"],
+        "allow_change": ["camera distance", "subject crop", "foreground element"]
+      },
+      "ref_image_strategy": {
+        "subject": {
+          "description": "What subject reference is needed and why",
+          "control_type": "IP-Adapter / Reference",
+          "priority": "required"
+        },
+        "structure": {
+          "description": "What structural/spatial reference is needed",
+          "control_type": "Depth / Canny",
+          "priority": "optional"
+        },
+        "style": {
+          "description": "What style/mood reference is needed",
+          "control_type": "Style Transfer",
+          "priority": "optional"
+        }
+      }
+    }
+  ]
+}
+
+Rules:
+- motion_intensity: integer 1-10 (1=imperceptible, 5=moderate, 10=aggressive)
+- camera_motion: use named values only: static / subtle_push_in / subtle_pull_out / orbital_left / orbital_right / handheld_drift / crane_up / crane_down / whip_pan
+- visual_anchor must be IDENTICAL across all shots in the same session — it is the unchanging identity of the subject
+- carry_from_prev for Shot 1 must be null
+- ref_image_strategy fields can be null if genuinely not needed${codexSection}
+
+Respond ONLY with the JSON object. No markdown, no explanation.`;
 
   const userMsg = `Scenes: ${JSON.stringify(sharedState.script.scenes)}
 Visual Bible: ${JSON.stringify(sharedState.research.visual_bible)}
-Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}`;
+Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
 
   try {
     const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
     removeTyping();
     const parsed = safeParseJSON(resp);
     if (parsed && parsed.shots) {
-      sharedState.visual.shots = parsed.shots.map((s,i) => ({ shot_n: i+1, ...s }));
+      sharedState.visual.shots = parsed.shots.map((s, i) => ({ ...s, shot_n: i + 1 }));
       setAgentStatus('visual', 'done');
       sharedState.session.current_agent = 'audio';
       updateCodex();
-      addMessage('system', `Shot ${parsed.shots.length}개 생성 완료. Audio 에이전트 시작합니다.`);
+      addMessage('system', `Shot ${parsed.shots.length}개 공정 지시서 생성 완료. Audio 에이전트 시작합니다.`);
       setAgentStatus('audio', 'running');
       runAudioAgent();
     } else {
@@ -1402,16 +1643,7 @@ Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
 // ─── ASSEMBLER ───────────────────────────────────────────
 function runAssembler() {
   try {
-    const output = sharedState.visual.shots.map(shot => ({
-      shot_n: shot.shot_n,
-      scene_n: shot.scene_n,
-      t2i_prompt: shot.t2i || {},
-      i2v_prompt: shot.i2v || {},
-      reference_image_instruction: shot.anchor || '',
-      audio_note: null
-    }));
-
-    sharedState.assembler.output = output;
+    sharedState.assembler.output = sharedState.visual.shots;
     sharedState.assembler.bgm_brief = sharedState.audio?.bgm
       ? `BPM ${sharedState.audio.bgm.target_bpm} — ${(sharedState.audio.bgm.mood_keywords||[]).join(', ')}`
       : null;
@@ -1420,28 +1652,71 @@ function runAssembler() {
     sharedState.session.current_agent = 'assembler';
     updateCodex();
 
-    // Build final output card
-    let shotsHtml = sharedState.visual.shots.map(s => {
-      const t2i = s.t2i || {};
-      const i2v = s.i2v || {};
-      return `<div class="scene-card">
-        <span class="scene-num">Shot ${s.shot_n} — Scene ${s.scene_n}</span>
-        ${t2i.higgsfield ? `<div class="output-field"><span class="output-key">T2I · Higgsfield</span><span class="output-val">${t2i.higgsfield}</span></div>` : ''}
-        ${t2i.freepik ? `<div class="output-field"><span class="output-key">T2I · Freepik</span><span class="output-val">${t2i.freepik}</span></div>` : ''}
-        ${i2v.higgsfield ? `<div class="output-field"><span class="output-key">I2V · Higgsfield</span><span class="output-val">${i2v.higgsfield}</span></div>` : ''}
-        <div class="output-field"><span class="output-key">Camera</span><span class="output-val">${s.camera_movement || '—'}</span></div>
-        <div class="output-field"><span class="output-key">Motion</span><span class="output-val">${s.motion_intensity || '—'} · Transition: ${s.transition_out || 'cut'}</span></div>
+    // ─── Final Output Card
+    const shotsHtml = sharedState.visual.shots.map(s => {
+      const mp = s.motion_parameters || {};
+      const vi = s.visual_inheritance || {};
+      const ri = s.ref_image_strategy || {};
+
+      const refRows = ['subject','structure','style']
+        .filter(k => ri[k])
+        .map(k => {
+          const r = ri[k];
+          const priorityColor = r.priority === 'required' ? 'var(--lime-70)' : 'var(--slate-45)';
+          return `<div style="display:flex;gap:6px;align-items:baseline;margin-top:3px">
+            <span style="font-size:8px;text-transform:uppercase;letter-spacing:0.08em;color:${priorityColor};font-family:var(--mono);min-width:52px">${k}</span>
+            <span style="font-size:10.5px;color:var(--w-50);font-weight:300">${r.description} <span style="color:var(--slate-35);font-size:9px">[${r.control_type}]</span></span>
+          </div>`;
+        }).join('');
+
+      const lockList = (vi.lock_elements||[]).join(' · ');
+      const allowList = (vi.allow_change||[]).join(' · ');
+
+      return `<div class="scene-card" style="gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span class="scene-num">SHOT ${s.shot_n} — SCENE ${s.scene_n}</span>
+          <span style="font-size:9px;color:var(--slate-35);font-family:var(--mono)">${mp.camera_motion || ''} · ${mp.duration_guide || ''} · intensity ${mp.motion_intensity || '—'}/10</span>
+        </div>
+
+        <div class="output-field">
+          <span class="output-key" style="color:var(--lime-50)">Visual Anchor</span>
+          <span class="output-val" style="font-size:10.5px">${s.visual_anchor || '—'}</span>
+        </div>
+
+        <div class="output-field">
+          <span class="output-key">T2I Master Prompt</span>
+          <span class="output-val" style="font-size:10.5px">${s.t2i_master_prompt || '—'}</span>
+        </div>
+
+        <div class="output-field">
+          <span class="output-key">I2V Prompt</span>
+          <span class="output-val" style="font-size:10.5px;font-style:italic;color:var(--w-50)">${s.i2v_prompt || '—'}</span>
+        </div>
+
+        ${vi.carry_from_prev || lockList ? `<div class="output-field">
+          <span class="output-key">Visual Inheritance</span>
+          ${vi.carry_from_prev ? `<span class="output-val" style="font-size:10px;color:var(--slate-45)">↑ ${vi.carry_from_prev}</span>` : ''}
+          ${lockList ? `<span class="output-val" style="font-size:10px;color:var(--slate-35)">🔒 ${lockList}</span>` : ''}
+          ${allowList ? `<span class="output-val" style="font-size:10px;color:var(--slate-25)">↕ ${allowList}</span>` : ''}
+        </div>` : ''}
+
+        ${refRows ? `<div class="output-field">
+          <span class="output-key">Ref Image Strategy</span>
+          ${refRows}
+        </div>` : ''}
+
+        ${mp.seed_note ? `<div style="font-size:9px;color:var(--slate-25);font-family:var(--mono);padding-top:2px">${mp.seed_note}</div>` : ''}
       </div>`;
     }).join('');
 
+    let finalHtml = shotsHtml;
     if (sharedState.assembler.bgm_brief) {
-      shotsHtml += `<div class="output-divider"></div>
+      finalHtml += `<div class="output-divider"></div>
         <div class="output-field"><span class="output-key">BGM Direction</span><span class="output-val">${sharedState.assembler.bgm_brief}</span></div>`;
     }
 
-    setOutputCard('Assembler — Final Output', shotsHtml, false);
+    setOutputCard('Assembler — Production Order', finalHtml, false);
 
-    // Show archive button
     const actionsEl = document.getElementById('output-actions');
     actionsEl.style.display = 'flex';
     actionsEl.innerHTML = `
@@ -1451,7 +1726,7 @@ function runAssembler() {
 
     document.getElementById('nav-dot').classList.remove('active');
     document.getElementById('nav-dot').style.background = 'rgba(148,163,184,0.4)';
-    addMessage('system', '파이프라인 완료. [Archive]를 눌러 결과물을 저장하세요.');
+    addMessage('system', '공정 지시서 발행 완료. [Archive]를 눌러 결과물을 저장하세요.');
   } catch(e) {
     addMessage('error', 'Assembler 오류: ' + e.message);
     setAgentStatus('assembler', 'failed');
@@ -1462,8 +1737,11 @@ function runAssembler() {
 // ─── ARCHIVE ─────────────────────────────────────────────
 function archiveSession() {
   if (!sharedState) return;
-  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]');
+  // 기존 아카이브 초기화 (구버전 스키마 폐기)
+  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]')
+    .filter(a => a.schema_version === 2); // v2만 유지
   const entry = {
+    schema_version: 2,
     saved_at: new Date().toISOString(),
     session_id: sharedState.session.session_id,
     brand_name: sharedState.planner_director?.brand?.name || '—',
@@ -1482,8 +1760,42 @@ function archiveSession() {
   renderArchive();
 }
 
+function buildShotText(shots) {
+  return (shots || []).map(s => {
+    const mp = s.motion_parameters || {};
+    const vi = s.visual_inheritance || {};
+    const ri = s.ref_image_strategy || {};
+    const refLines = ['subject','structure','style']
+      .filter(k => ri[k])
+      .map(k => `    ${k.toUpperCase()} [${ri[k].priority}] — ${ri[k].description} · ${ri[k].control_type}`)
+      .join('\n');
+    return `[SHOT ${s.shot_n} — SCENE ${s.scene_n}]
+VISUAL ANCHOR
+  ${s.visual_anchor || '—'}
+
+T2I MASTER PROMPT
+  ${s.t2i_master_prompt || '—'}
+
+I2V PROMPT
+  ${s.i2v_prompt || '—'}
+
+MOTION PARAMETERS
+  intensity: ${mp.motion_intensity || '—'}/10 · camera: ${mp.camera_motion || '—'} · duration: ${mp.duration_guide || '—'}
+  ${mp.seed_note || ''}
+
+VISUAL INHERITANCE
+  carry_from_prev: ${vi.carry_from_prev || 'null'}
+  lock: ${(vi.lock_elements||[]).join(', ')||'—'}
+  allow: ${(vi.allow_change||[]).join(', ')||'—'}
+
+REF IMAGE STRATEGY
+${refLines || '  —'}`;
+  }).join('\n\n─────────────────────────────────\n\n');
+}
+
 function renderArchive() {
-  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]');
+  const archives = JSON.parse(localStorage.getItem(LS_ARCHIVE) || '[]')
+    .filter(a => a.schema_version === 2);
   const countEl = document.getElementById('archive-count');
   const listEl = document.getElementById('archive-list');
   if (countEl) countEl.textContent = `${archives.length} session${archives.length !== 1 ? 's' : ''}`;
@@ -1499,33 +1811,70 @@ function renderArchive() {
 
   listEl.innerHTML = archives.map((a, idx) => {
     const date = new Date(a.saved_at).toLocaleDateString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-    const shotRows = (a.shots || []).map(s => {
-      const t = s.t2i || {};
-      const iv = s.i2v || {};
-      return `<div class="archive-shot-item">
-        <span class="archive-shot-num">Shot ${s.shot_n} — Scene ${s.scene_n}</span>
-        ${t.higgsfield ? `<div class="archive-prompt-row"><span class="archive-prompt-key">T2I · Higgsfield</span><span class="archive-prompt-val">${t.higgsfield}</span></div>` : ''}
-        ${t.freepik ? `<div class="archive-prompt-row"><span class="archive-prompt-key">T2I · Freepik</span><span class="archive-prompt-val">${t.freepik}</span></div>` : ''}
-        ${iv.higgsfield ? `<div class="archive-prompt-row"><span class="archive-prompt-key">I2V · Higgsfield</span><span class="archive-prompt-val">${iv.higgsfield}</span></div>` : ''}
-      </div>`;
-    }).join('');
 
     const sceneText = (a.scenes || []).map(s =>
       `[Scene ${s.scene_n}]\nSpace: ${s.space}\nAction: ${s.action}\nEmotion: ${s.emotion}${s.camera ? '\nCamera: '+s.camera : ''}`
     ).join('\n\n');
 
-    const allPrompts = (a.shots || []).map(s => {
-      const t = s.t2i || {}; const iv = s.i2v || {};
-      return `[Shot ${s.shot_n}]\nT2I Higgsfield: ${t.higgsfield || ''}\nT2I Freepik: ${t.freepik || ''}\nI2V Higgsfield: ${iv.higgsfield || ''}`;
-    }).join('\n\n');
+    const shotText = buildShotText(a.shots);
+    const allText = `AUTEUR PRODUCTION ORDER — ${a.brand_name} / ${a.product}
+${a.session_id} · ${date} · Entry ${a.entry_point}
 
-    const allText = `AUTEUR ARCHIVE — ${a.brand_name} / ${a.product}\n${date}\n\n=== VISUAL BIBLE ===\n${JSON.stringify(a.visual_bible, null, 2)}\n\n=== SCRIPT ===\n${sceneText}\n\n=== PROMPTS ===\n${allPrompts}${a.bgm_brief ? '\n\n=== AUDIO ===\n' + a.bgm_brief : ''}`;
+${'═'.repeat(50)}
+DIRECTOR'S INTENT
+${'═'.repeat(50)}
+Target Emotion : ${a.director_intent?.target_emotion || '—'}
+Product Role   : ${a.director_intent?.product_role || '—'}
+Reference Tone : ${a.director_intent?.reference_tone || '—'}
+
+${'═'.repeat(50)}
+VISUAL BIBLE
+${'═'.repeat(50)}
+${JSON.stringify(a.visual_bible, null, 2)}
+
+${'═'.repeat(50)}
+SCRIPT
+${'═'.repeat(50)}
+${sceneText}
+
+${'═'.repeat(50)}
+PRODUCTION ORDERS — SHOTS
+${'═'.repeat(50)}
+${shotText}${a.bgm_brief ? `\n\n${'═'.repeat(50)}\nAUDIO DIRECTION\n${'═'.repeat(50)}\n${a.bgm_brief}` : ''}`;
+
+    // Shot rows for archive card
+    const shotRows = (a.shots || []).map(s => {
+      const mp = s.motion_parameters || {};
+      const vi = s.visual_inheritance || {};
+      const ri = s.ref_image_strategy || {};
+      const refItems = ['subject','structure','style']
+        .filter(k => ri[k])
+        .map(k => {
+          const priorityColor = ri[k].priority === 'required' ? 'var(--lime-50)' : 'var(--slate-35)';
+          return `<div class="archive-prompt-row">
+            <span class="archive-prompt-key" style="color:${priorityColor}">${k} [${ri[k].priority}] · ${ri[k].control_type}</span>
+            <span class="archive-prompt-val">${ri[k].description}</span>
+          </div>`;
+        }).join('');
+
+      return `<div class="archive-shot-item">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span class="archive-shot-num">SHOT ${s.shot_n} — SCENE ${s.scene_n}</span>
+          <span style="font-size:8px;color:var(--slate-25);font-family:var(--mono)">${mp.camera_motion||''} · ${mp.duration_guide||''} · ${mp.motion_intensity||'—'}/10</span>
+        </div>
+        ${s.visual_anchor ? `<div class="archive-prompt-row"><span class="archive-prompt-key" style="color:var(--lime-50)">Visual Anchor</span><span class="archive-prompt-val">${s.visual_anchor}</span></div>` : ''}
+        ${s.t2i_master_prompt ? `<div class="archive-prompt-row"><span class="archive-prompt-key">T2I Master</span><span class="archive-prompt-val">${s.t2i_master_prompt}</span></div>` : ''}
+        ${s.i2v_prompt ? `<div class="archive-prompt-row"><span class="archive-prompt-key">I2V</span><span class="archive-prompt-val" style="font-style:italic">${s.i2v_prompt}</span></div>` : ''}
+        ${vi.carry_from_prev ? `<div class="archive-prompt-row"><span class="archive-prompt-key">↑ Inherit</span><span class="archive-prompt-val">${vi.carry_from_prev}</span></div>` : ''}
+        ${refItems ? `<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--w-06)">${refItems}</div>` : ''}
+      </div>`;
+    }).join('');
 
     return `<div class="archive-card" id="acard-${idx}">
       <div class="archive-card-header" onclick="toggleArchiveCard(${idx})">
         <div class="archive-card-meta">
           <span class="archive-card-brand">${a.brand_name} — ${a.product}</span>
-          <span class="archive-card-sub">${a.session_id} · ${date} · Entry ${a.entry_point}</span>
+          <span class="archive-card-sub">${a.session_id} · ${date} · Entry ${a.entry_point} · ${(a.shots||[]).length} shots</span>
         </div>
         <div class="archive-card-actions">
           <button class="archive-copy-all" onclick="event.stopPropagation(); copyText('${escapeForAttr(allText)}', this)">Copy All</button>
@@ -1549,8 +1898,8 @@ function renderArchive() {
         </div>
         <div class="archive-section">
           <div class="archive-section-header">
-            <span class="archive-section-title">Shot Prompts</span>
-            <button class="archive-copy-btn" onclick="copyText('${escapeForAttr(allPrompts)}', this)">Copy</button>
+            <span class="archive-section-title">Production Orders — Shots</span>
+            <button class="archive-copy-btn" onclick="copyText('${escapeForAttr(shotText)}', this)">Copy</button>
           </div>
           <div class="archive-shot-grid">${shotRows}</div>
         </div>
@@ -1594,6 +1943,9 @@ function copyText(text, btn) {
 function startNewSession() {
   sharedState = null;
   chatHistory = [];
+  pendingRefFile = null;
+  stagingRefFile = null;
+  localStorage.removeItem('ref_file_name');
   document.getElementById('messages').innerHTML = '';
   AGENT_IDS.forEach(id => setAgentStatus(id, 'pending'));
   document.getElementById('session-label').textContent = '—';
@@ -1661,11 +2013,21 @@ function openSettings() {
   document.getElementById('input-claude-key').value = localStorage.getItem(LS_CLAUDE) || '';
   document.getElementById('input-gemini-key').value = localStorage.getItem(LS_GEMINI) || '';
   document.getElementById('input-codex-feed').value = localStorage.getItem('codex_feed') || '';
-  // Restore file label
-  const storedFileName = localStorage.getItem('ref_file_name');
-  if (storedFileName) {
-    document.getElementById('file-drop-label').textContent = '✓ ' + storedFileName;
+  // 파일 상태 표시: pending(저장됨) > staging(미저장) > localStorage 이름
+  if (pendingRefFile) {
+    document.getElementById('file-drop-label').textContent = '✓ ' + pendingRefFile.file.name;
     document.getElementById('file-drop-zone').style.borderColor = 'var(--lime-30)';
+  } else if (stagingRefFile) {
+    document.getElementById('file-drop-label').textContent = '✓ ' + stagingRefFile.file.name + ' (미저장)';
+    document.getElementById('file-drop-zone').style.borderColor = 'rgba(232,255,87,0.20)';
+  } else {
+    const storedFileName = localStorage.getItem('ref_file_name');
+    if (storedFileName) {
+      document.getElementById('file-drop-label').textContent = storedFileName + ' (재선택 필요)';
+    } else {
+      document.getElementById('file-drop-label').textContent = '파일을 드래그하거나 클릭하세요';
+    }
+    document.getElementById('file-drop-zone').style.borderColor = '';
   }
   document.getElementById('settings-modal').classList.add('open');
 }
@@ -1679,12 +2041,21 @@ function saveSettings() {
   if (ck) localStorage.setItem(LS_CLAUDE, ck);
   if (gk) localStorage.setItem(LS_GEMINI, gk);
   localStorage.setItem('codex_feed', cf);
+  // ⑥ 저장 버튼 시 파일 커밋
+  if (stagingRefFile) {
+    pendingRefFile = stagingRefFile;
+    stagingRefFile = null;
+    localStorage.setItem('ref_file_name', pendingRefFile.file.name);
+    document.getElementById('file-drop-label').textContent = '✓ ' + pendingRefFile.file.name;
+    document.getElementById('file-drop-zone').style.borderColor = 'var(--lime-30)';
+  }
   closeSettings();
   showToast('저장됐습니다');
 }
 
 // ─── FILE HANDLING ────────────────────────────────────────
-let pendingRefFile = null; // { file, dataUrl }
+let pendingRefFile = null; // 실제 적용된 파일 (저장 버튼 후)
+let stagingRefFile = null; // 선택만 된 파일 (저장 전)
 
 function handleFileSelect(event) {
   const file = event.target.files[0];
@@ -1702,10 +2073,9 @@ function setRefFile(file) {
     showToast('JPEG / PNG / WEBP / MP4만 지원합니다 (AVIF 불가)');
     return;
   }
-  pendingRefFile = { file };
-  localStorage.setItem('ref_file_name', file.name);
-  document.getElementById('file-drop-label').textContent = '✓ ' + file.name;
-  document.getElementById('file-drop-zone').style.borderColor = 'var(--lime-30)';
+  stagingRefFile = { file };
+  document.getElementById('file-drop-label').textContent = '✓ ' + file.name + ' (미저장)';
+  document.getElementById('file-drop-zone').style.borderColor = 'rgba(232,255,87,0.20)';
 }
 
 // Gemini File API upload — FormData + uploadType=multipart
@@ -1766,6 +2136,12 @@ async function callGemini(prompt, fileUri, mimeType, apiKey) {
     } catch(e) { lastErr = e; }
   }
   throw lastErr;
+}
+
+function toggleGeminiAnalysis(btn) {
+  const body = btn.parentElement.nextElementSibling;
+  const open = body.classList.toggle('gemini-open');
+  btn.querySelector('.gemini-toggle-label').textContent = open ? '접기 ▴' : '펼치기 ▾';
 }
 
 // ─── CLAUDE API ───────────────────────────────────────────
