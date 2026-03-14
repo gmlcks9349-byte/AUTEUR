@@ -513,6 +513,8 @@ input, textarea { font-family: inherit; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+.gemini-analysis-body.gemini-open { display: block; }
+
 /* ─── SCROLLBAR GLOBAL ───────────────────────────────── */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1112,7 +1114,16 @@ Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
          <div class="output-field"><span class="output-key">Tone</span><span class="output-val">${vb.tone}</span></div>
          <div class="output-divider"></div>
          <div class="output-field"><span class="output-key">Brand Context</span><span class="output-val">${parsed.brand_context || '—'}</span></div>
-         ${geminiAnalysis ? `<div class="output-divider"></div><div class="output-field"><span class="output-key" style="color:var(--lime-50)">Gemini Ref Analysis</span><span class="output-val" style="font-size:10.5px;color:var(--slate-45)">${geminiAnalysis.substring(0,200)}${geminiAnalysis.length > 200 ? '…' : ''}</span></div>` : ''}`,
+         ${geminiAnalysis ? `<div class="output-divider"></div>
+<div class="output-field">
+  <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="(function(el){const body=el.nextElementSibling;const open=body.classList.toggle('gemini-open');el.querySelector('span:last-child').textContent=open?'접기 ▴':'펼치기 ▾';})(this)">
+    <span class="output-key" style="color:var(--lime-50)">Gemini Ref Analysis</span>
+    <span style="font-size:9px;color:var(--slate-35);font-family:var(--mono);letter-spacing:0.06em">펼치기 ▾</span>
+  </div>
+  <div class="gemini-analysis-body" style="display:none;margin-top:6px">
+    <span class="output-val" style="font-size:10.5px;color:var(--slate-45);white-space:pre-wrap">${geminiAnalysis}</span>
+  </div>
+</div>` : ''}`,
         true
       );
       addMessage('hitl', `Visual Bible 초안이 생성됐습니다${geminiAnalysis ? ' (레퍼런스 파일 반영)' : ''}. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
