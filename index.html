@@ -668,6 +668,25 @@ input, textarea { font-family: inherit; }
       <label class="modal-label">Gemini API Key</label>
       <input class="modal-input" type="password" id="input-gemini-key" placeholder="AIza...">
     </div>
+    <div class="modal-field">
+      <label class="modal-label">Reference File — Research Agent <span style="color:var(--slate-25);font-size:8px;margin-left:4px;text-transform:none;letter-spacing:0">(JPEG / PNG / WEBP / MP4)</span></label>
+      <div id="file-drop-zone" style="
+        border: 0.5px dashed var(--w-12); border-radius: var(--radius);
+        padding: 12px 14px; cursor: pointer; text-align: center;
+        transition: border-color 0.2s, background 0.2s;
+        background: var(--w-04);
+      " onclick="document.getElementById('ref-file-input').click()"
+         ondragover="event.preventDefault(); this.style.borderColor='var(--lime-30)'"
+         ondragleave="this.style.borderColor=''"
+         ondrop="handleFileDrop(event)">
+        <input type="file" id="ref-file-input" accept="image/jpeg,image/png,image/webp,video/mp4" style="display:none" onchange="handleFileSelect(event)">
+        <span id="file-drop-label" style="font-size:10px; color:var(--slate-35); letter-spacing:0.04em">파일을 드래그하거나 클릭하세요</span>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">CODEX Feed <span style="color:var(--slate-25);font-size:8px;margin-left:4px;text-transform:none;letter-spacing:0">(연출 감각 주입 — Planner/Script/Visual 에이전트 적용)</span></label>
+      <textarea id="input-codex-feed" class="modal-input" rows="5" placeholder="CODEX FEEDING OUTPUT 탭에서 복사한 텍스트를 붙여넣으세요." style="resize:vertical; min-height:80px; font-family:var(--mono); font-size:10px; line-height:1.6;"></textarea>
+    </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()">취소</button>
       <button class="modal-save" onclick="saveSettings()">저장</button>
@@ -803,6 +822,10 @@ function showOutputEmpty(msg = '파이프라인 대기 중') {
 
 // ─── PLANNER SYSTEM PROMPT ───────────────────────────────
 function buildPlannerSystemPrompt() {
+  const codexFeed = localStorage.getItem('codex_feed') || '';
+  const codexSection = codexFeed
+    ? `\n\nCODEX DIRECTORIAL REFERENCE (this is your stylistic compass — internalize it when guiding the director):\n${codexFeed}`
+    : '';
   return `You are the Planner & Director agent of Auteur — an AI-powered cinematic production pipeline.
 
 Your role: collect brand info and Director's Intent through natural multi-turn conversation in Korean.
@@ -829,7 +852,7 @@ INTENT_CONFIRMED::{
   "scene_count_guide": 5
 }
 
-Do not output this JSON until you have confirmed all required fields.
+Do not output this JSON until you have confirmed all required fields.${codexSection}
 Current state: ${JSON.stringify(sharedState?.planner_director || {})}`;
 }
 
@@ -956,6 +979,17 @@ function handleConfirm() {
     setAgentStatus('moderation', 'running');
     updateCodex();
     runModerationAgent();
+  } else if (checkpoint === 'moderation_flag') {
+    // 플래그 무시하고 Visual로 진행
+    setAgentStatus('moderation', 'done');
+    sharedState.moderation.resolution.action = 'override';
+    sharedState.moderation.resolution.heechan_reviewed = true;
+    sharedState.session.current_agent = 'visual';
+    document.getElementById('output-actions').style.display = 'none';
+    addMessage('system', 'Moderation 플래그 무시 확정 — Visual 에이전트 시작합니다.');
+    setAgentStatus('visual', 'running');
+    updateCodex();
+    runVisualAgent();
   }
 }
 
@@ -965,14 +999,72 @@ function handleRevise() {
   document.getElementById('output-actions').style.display = 'none';
   sharedState.session.hitl_pending = false;
   sharedState.session.hitl_checkpoint = null;
-  addMessage('hitl', '수정 요청을 받았습니다. 어떤 부분을 바꾸고 싶으신지 말씀해 주세요.');
+
+  if (checkpoint === 'moderation_flag') {
+    // Moderation flag → Script 재작성 루프
+    const flags = sharedState.moderation?.flags || [];
+    const coherenceFlags = sharedState.moderation?.coherence_flags || [];
+    const revisionEntry = {
+      revision_n: (sharedState.script.revision_history?.length || 0) + 1,
+      triggered_by: 'moderation',
+      flags: [...flags, ...coherenceFlags],
+      timestamp: new Date().toISOString()
+    };
+    if (!sharedState.script.revision_history) sharedState.script.revision_history = [];
+    sharedState.script.revision_history.push(revisionEntry);
+
+    setAgentStatus('moderation', 'done');
+    setAgentStatus('script', 'running');
+    sharedState.session.current_agent = 'script';
+    updateCodex();
+    addMessage('system', `Script 재작성 시작 — Revision #${revisionEntry.revision_n}. Moderation 플래그 반영 중...`);
+    runScriptAgent(true);
+  } else {
+    addMessage('hitl', '수정 요청을 받았습니다. 어떤 부분을 바꾸고 싶으신지 말씀해 주세요.');
+  }
 }
 
 // ─── RESEARCH AGENT ──────────────────────────────────────
 async function runResearchAgent() {
   const claudeKey = localStorage.getItem(LS_CLAUDE);
+  const geminiKey = localStorage.getItem(LS_GEMINI);
   if (!claudeKey) return;
   isProcessing = true; showTyping();
+
+  let geminiAnalysis = '';
+
+  // Gemini 파일 분석 경로 (파일이 있을 때만)
+  if (pendingRefFile && geminiKey) {
+    try {
+      addMessage('system', '레퍼런스 파일 업로드 중...');
+      const fileUri = await geminiUploadFile(pendingRefFile.file, geminiKey);
+      addMessage('system', '파일 업로드 완료. Gemini 분석 시작...');
+
+      const geminiPrompt = `You are analyzing a reference image/video for a cinematic brand film.
+Brand: ${sharedState.planner_director.brand.name} — ${sharedState.planner_director.brand.product}
+Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
+
+Extract the following as a structured analysis:
+1. VISUAL TONE: lighting, color palette, contrast, mood
+2. SPACE/ENVIRONMENT: setting, depth, background treatment
+3. SUBJECT/CHARACTER: appearance, posture, relationship to product
+4. PRODUCT PRESENTATION: how the product is shown, framing, prominence
+5. CAMERA LANGUAGE: shot types, movement, angle
+6. OVERALL ATMOSPHERE: in 2-3 sentences, what feeling does this reference convey?
+
+Be specific and production-oriented. No generic commentary.`;
+
+      geminiAnalysis = await callGemini(geminiPrompt, fileUri, pendingRefFile.file.type, geminiKey);
+      addMessage('system', 'Gemini 분석 완료. Visual Bible 생성 중...');
+    } catch(e) {
+      addMessage('error', `Gemini 분석 오류: ${e.message}. Claude 단독으로 진행합니다.`);
+      geminiAnalysis = '';
+    }
+  }
+
+  const geminiSection = geminiAnalysis
+    ? `\n\nREFERENCE FILE ANALYSIS (from Gemini — use this to inform Visual Bible):\n${geminiAnalysis}`
+    : '';
 
   const systemPrompt = `You are the Research Agent of Auteur. Generate a Visual Bible for the production.
 Based on the Director's Intent provided, create a concise Visual Bible with these fields:
@@ -980,7 +1072,7 @@ Based on the Director's Intent provided, create a concise Visual Bible with thes
 - space: location/environment description
 - product_spec: product physical description (material, color, form)
 - tone: overall visual/emotional tone
-- brand_context: brief brand cultural context
+- brand_context: brief brand cultural context${geminiSection}
 
 Respond ONLY with this JSON (no other text):
 {
@@ -1003,6 +1095,7 @@ Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
     const parsed = safeParseJSON(resp);
     if (parsed && parsed.visual_bible) {
       sharedState.research = parsed;
+      if (geminiAnalysis) sharedState.research.gemini_analysis = geminiAnalysis;
       sharedState.session.hitl_pending = true;
       sharedState.session.hitl_checkpoint = 'research';
       updateCodex();
@@ -1018,10 +1111,11 @@ Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
          <div class="output-divider"></div>
          <div class="output-field"><span class="output-key">Tone</span><span class="output-val">${vb.tone}</span></div>
          <div class="output-divider"></div>
-         <div class="output-field"><span class="output-key">Brand Context</span><span class="output-val">${parsed.brand_context || '—'}</span></div>`,
+         <div class="output-field"><span class="output-key">Brand Context</span><span class="output-val">${parsed.brand_context || '—'}</span></div>
+         ${geminiAnalysis ? `<div class="output-divider"></div><div class="output-field"><span class="output-key" style="color:var(--lime-50)">Gemini Ref Analysis</span><span class="output-val" style="font-size:10.5px;color:var(--slate-45)">${geminiAnalysis.substring(0,200)}${geminiAnalysis.length > 200 ? '…' : ''}</span></div>` : ''}`,
         true
       );
-      addMessage('hitl', 'Visual Bible 초안이 생성됐습니다. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.');
+      addMessage('hitl', `Visual Bible 초안이 생성됐습니다${geminiAnalysis ? ' (레퍼런스 파일 반영)' : ''}. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
     } else {
       addMessage('error', 'Visual Bible 파싱 실패. 다시 시도합니다.');
       setAgentStatus('research', 'failed');
@@ -1035,16 +1129,30 @@ Brand: ${JSON.stringify(sharedState.planner_director.brand)}`;
 }
 
 // ─── SCRIPT AGENT ────────────────────────────────────────
-async function runScriptAgent() {
+async function runScriptAgent(isRevision = false) {
   const claudeKey = localStorage.getItem(LS_CLAUDE);
   if (!claudeKey) return;
   isProcessing = true; showTyping();
 
   const sceneCount = sharedState.planner_director.execution_plan.scene_count_guide;
+  const codexFeed = localStorage.getItem('codex_feed') || '';
+  const codexSection = codexFeed
+    ? `\n\nCODEX DIRECTORIAL REFERENCE (apply this sensibility throughout):\n${codexFeed}`
+    : '';
+
+  let revisionSection = '';
+  if (isRevision && sharedState.script.revision_history?.length) {
+    const lastRevision = sharedState.script.revision_history[sharedState.script.revision_history.length - 1];
+    const flagSummary = lastRevision.flags.map(f =>
+      `- Scene ${f.scene_n || '?'} [${f.severity || 'medium'}]: ${f.issue || f.description || JSON.stringify(f)}${f.suggested_fix ? ' → Fix: ' + f.suggested_fix : ''}`
+    ).join('\n');
+    revisionSection = `\n\nREVISION #${lastRevision.revision_n} — Moderation 플래그 수정 지시:\n${flagSummary}\n\nPrevious script for reference:\n${JSON.stringify(sharedState.script.scenes, null, 2)}\n\nRewrite scenes addressing ALL flags above.`;
+  }
+
   const systemPrompt = `You are the Script Agent of Auteur. Write a scene-by-scene script.
 Use the Visual Bible and Director's Intent to write exactly ${sceneCount} scenes.
 Each scene must have emotional purpose — ask "why does this scene exist?".
-Include continuity links between scenes.
+Include continuity links between scenes.${codexSection}${revisionSection}
 
 Respond ONLY with this JSON:
 {
@@ -1092,7 +1200,9 @@ Brand Context: ${sharedState.research.brand_context}`;
       ).join('');
 
       setOutputCard('Script — Scene Breakdown', scenesHtml, true);
-      addMessage('hitl', `씬 ${parsed.scenes.length}개가 작성됐습니다. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
+      const revN = sharedState.script.revision_history?.length || 0;
+      const revLabel = revN > 0 ? ` (Revision #${revN})` : '';
+      addMessage('hitl', `씬 ${parsed.scenes.length}개가 작성됐습니다${revLabel}. 확인 후 [확정] 또는 [수정 요청]을 눌러주세요.`);
     } else {
       addMessage('error', 'Script 파싱 실패.');
       setAgentStatus('script', 'failed');
@@ -1183,6 +1293,11 @@ async function runVisualAgent() {
   if (!claudeKey) return;
   isProcessing = true; showTyping();
 
+  const codexFeed = localStorage.getItem('codex_feed') || '';
+  const codexSection = codexFeed
+    ? `\n\nCODEX DIRECTORIAL REFERENCE (apply this shooting sensibility to every prompt):\n${codexFeed}`
+    : '';
+
   const systemPrompt = `You are the Visual Agent of Auteur. Generate T2I and I2V prompts for each scene.
 For each scene, create 1-2 shots with:
 - anchor: fixed visual elements from Visual Bible
@@ -1192,7 +1307,7 @@ For each scene, create 1-2 shots with:
 - i2v.higgsfield and i2v.freepik: I2V motion prompts
 - camera_movement: specific camera instruction
 - motion_intensity: subtle / moderate / dynamic
-- transition_out: cut / fade / match_cut / smash_cut
+- transition_out: cut / fade / match_cut / smash_cut${codexSection}
 
 Respond ONLY with JSON:
 {"shots": [...]}`;
@@ -1230,6 +1345,7 @@ Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
 async function runAudioAgent() {
   const claudeKey = localStorage.getItem(LS_CLAUDE);
   if (!claudeKey) return;
+  isProcessing = true; showTyping();
 
   const systemPrompt = `You are the Audio Agent of Auteur. Recommend audio direction only (no API calls).
 
@@ -1255,6 +1371,7 @@ Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
 
   try {
     const resp = await callClaude(systemPrompt, [{role:'user', content: userMsg}], claudeKey);
+    removeTyping();
     const parsed = safeParseJSON(resp);
     if (parsed) sharedState.audio = parsed;
     setAgentStatus('audio', 'done');
@@ -1264,6 +1381,7 @@ Director Intent: ${JSON.stringify(sharedState.planner_director.director_intent)}
     setAgentStatus('assembler', 'running');
     runAssembler();
   } catch(e) {
+    removeTyping();
     addMessage('error', 'Audio 에이전트 오류: ' + e.message);
     setAgentStatus('audio', 'failed');
     isProcessing = false;
@@ -1531,6 +1649,13 @@ function updateCodex() {
 function openSettings() {
   document.getElementById('input-claude-key').value = localStorage.getItem(LS_CLAUDE) || '';
   document.getElementById('input-gemini-key').value = localStorage.getItem(LS_GEMINI) || '';
+  document.getElementById('input-codex-feed').value = localStorage.getItem('codex_feed') || '';
+  // Restore file label
+  const storedFileName = localStorage.getItem('ref_file_name');
+  if (storedFileName) {
+    document.getElementById('file-drop-label').textContent = '✓ ' + storedFileName;
+    document.getElementById('file-drop-zone').style.borderColor = 'var(--lime-30)';
+  }
   document.getElementById('settings-modal').classList.add('open');
 }
 function closeSettings() {
@@ -1539,10 +1664,97 @@ function closeSettings() {
 function saveSettings() {
   const ck = document.getElementById('input-claude-key').value.trim();
   const gk = document.getElementById('input-gemini-key').value.trim();
+  const cf = document.getElementById('input-codex-feed').value.trim();
   if (ck) localStorage.setItem(LS_CLAUDE, ck);
   if (gk) localStorage.setItem(LS_GEMINI, gk);
+  localStorage.setItem('codex_feed', cf);
   closeSettings();
   showToast('저장됐습니다');
+}
+
+// ─── FILE HANDLING ────────────────────────────────────────
+let pendingRefFile = null; // { file, dataUrl }
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) setRefFile(file);
+}
+function handleFileDrop(event) {
+  event.preventDefault();
+  document.getElementById('file-drop-zone').style.borderColor = '';
+  const file = event.dataTransfer.files[0];
+  if (file) setRefFile(file);
+}
+function setRefFile(file) {
+  const allowed = ['image/jpeg','image/png','image/webp','video/mp4'];
+  if (!allowed.includes(file.type)) {
+    showToast('JPEG / PNG / WEBP / MP4만 지원합니다 (AVIF 불가)');
+    return;
+  }
+  pendingRefFile = { file };
+  localStorage.setItem('ref_file_name', file.name);
+  document.getElementById('file-drop-label').textContent = '✓ ' + file.name;
+  document.getElementById('file-drop-zone').style.borderColor = 'var(--lime-30)';
+}
+
+// Gemini File API upload — FormData + uploadType=multipart
+async function geminiUploadFile(file, apiKey) {
+  const mimeType = file.type;
+  const metadataBlob = new Blob([JSON.stringify({ file: { display_name: file.name, mimeType } })], { type: 'application/json' });
+  const form = new FormData();
+  form.append('metadata', metadataBlob);
+  form.append('file', file, file.name);
+
+  const uploadResp = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=multipart&key=${apiKey}`,
+    { method: 'POST', body: form }
+  );
+  if (!uploadResp.ok) throw new Error('Gemini 파일 업로드 실패: ' + uploadResp.status);
+  const uploadData = await uploadResp.json();
+  const fileUri = uploadData?.file?.uri;
+  if (!fileUri) throw new Error('Gemini fileUri 추출 실패');
+  const fileId = fileUri.split('/').pop();
+
+  // Poll until ACTIVE
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const statusResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/files/${fileId}?key=${apiKey}`
+    );
+    const statusData = await statusResp.json();
+    const state = statusData?.state || statusData?.file?.state;
+    if (state === 'ACTIVE') return fileUri;
+    if (state === 'FAILED') throw new Error('Gemini 파일 처리 실패');
+  }
+  throw new Error('Gemini 파일 폴링 타임아웃 (40회)');
+}
+
+// Gemini content generation
+async function callGemini(prompt, fileUri, mimeType, apiKey) {
+  const parts = [{ text: prompt }];
+  if (fileUri) {
+    parts.unshift({ file_data: { mime_type: mimeType, file_uri: fileUri } });
+  }
+
+  let lastErr;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 3000 * Math.pow(2, attempt - 1)));
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts }] })
+        }
+      );
+      if (resp.status === 503 || resp.status === 429) { lastErr = new Error('Gemini 과부하'); continue; }
+      if (!resp.ok) throw new Error('Gemini API 오류: ' + resp.status);
+      const data = await resp.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } catch(e) { lastErr = e; }
+  }
+  throw lastErr;
 }
 
 // ─── CLAUDE API ───────────────────────────────────────────
